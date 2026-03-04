@@ -21,14 +21,17 @@ class SelectionToolbar: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         setupView()
+        setFrameSize(fittingSize)
     }
     
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupView()
+        setFrameSize(fittingSize)
     }
     
     private func setupView() {
+        translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0.15, alpha: 0.95).cgColor
         layer?.cornerRadius = 8
