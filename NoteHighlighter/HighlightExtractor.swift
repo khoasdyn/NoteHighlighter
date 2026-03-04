@@ -4,7 +4,7 @@ struct HighlightExtractor {
     
     static func extractHighlights(from document: PDFDocument) -> [Highlight] {
         var grouped: [String: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String)]] = [:]
-        var ungrouped: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String)] = []
+
         
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -26,9 +26,9 @@ struct HighlightExtractor {
                 
                 if let groupID = annotation.userName, !groupID.isEmpty {
                     grouped[groupID, default: []].append(entry)
-                } else {
-                    ungrouped.append(entry)
                 }
+                // Skip ungrouped annotations — these are pre-existing highlights
+                // from other PDF readers, not created by NoteHighlighter
             }
         }
         
@@ -83,63 +83,7 @@ struct HighlightExtractor {
             ))
         }
         
-        // Process ungrouped annotations (imported PDFs) with proximity merging
-        ungrouped.sort { a, b in
-            if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
-            return a.bounds.midY > b.bounds.midY
-        }
-        
-        var i = 0
-        while i < ungrouped.count {
-            let current = ungrouped[i]
-            var mergedBounds = current.bounds
-            var mergedTexts: [String] = [current.text]
-            var mergedNote = current.note
-            var j = i + 1
-            
-            while j < ungrouped.count {
-                let next = ungrouped[j]
-                guard next.pageIndex == current.pageIndex,
-                      next.color == current.color else { break }
-                
-                let gap = abs(mergedBounds.minY - next.bounds.maxY)
-                let lineHeight = max(mergedBounds.height, next.bounds.height)
-                guard gap < lineHeight * 1.5 else { break }
-                
-                mergedBounds = mergedBounds.union(next.bounds)
-                mergedTexts.append(next.text)
-                
-                if let nextNote = next.note, !nextNote.isEmpty {
-                    if let existing = mergedNote {
-                        mergedNote = existing + " " + nextNote
-                    } else {
-                        mergedNote = nextNote
-                    }
-                }
-                
-                j += 1
-            }
-            
-            let fullText = mergedTexts.joined(separator: " ")
-                .replacingOccurrences(of: "  ", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            if !fullText.isEmpty {
-                highlights.append(Highlight(
-                    text: fullText,
-                    pageIndex: current.pageIndex,
-                    endPageIndex: current.pageIndex,
-                    pageLabel: current.pageLabel,
-                    color: current.color,
-                    note: mergedNote,
-                    bounds: mergedBounds,
-                    creationDate: nil,
-                    groupID: nil
-                ))
-            }
-            
-            i = j
-        }
+
         
         highlights.sort { a, b in
             if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
