@@ -28,24 +28,28 @@ class AppState: ObservableObject {
             return
         }
         
-        self.currentBook = book
-        self.pdfDocument = document
-        self.pdfFileURL = url
-        self.fileName = book.title
-        self.selectedHighlight = nil
-        
-        loadHighlights()
+        DispatchQueue.main.async {
+            self.currentBook = book
+            self.pdfDocument = document
+            self.pdfFileURL = url
+            self.fileName = book.title
+            self.selectedHighlight = nil
+            
+            self.loadHighlights()
+        }
     }
     
     func closeBook() {
         saveHighlights()
-        currentBook = nil
-        pdfDocument = nil
-        pdfFileURL = nil
-        highlights = []
-        selectedHighlight = nil
-        fileName = ""
-        pdfView = nil
+        DispatchQueue.main.async {
+            self.currentBook = nil
+            self.pdfDocument = nil
+            self.pdfFileURL = nil
+            self.highlights = []
+            self.selectedHighlight = nil
+            self.fileName = ""
+            self.pdfView = nil
+        }
     }
     
     // MARK: - Highlight persistence
@@ -176,15 +180,15 @@ class AppState: ObservableObject {
               let document = pdfDocument,
               let page = document.page(at: highlight.pageIndex) else { return }
         
-        let destination = PDFDestination(page: page, at: highlight.bounds.origin)
+        // Calculate a point above the highlight so it appears centered.
+        // PDFDestination scrolls so the given point is at the TOP of the viewport,
+        // so we offset upward by half the visible height to center the highlight.
+        let visibleHeight = pdfView.visibleRect.height / pdfView.scaleFactor
+        let targetY = highlight.bounds.midY + visibleHeight / 2
+        
+        let destination = PDFDestination(page: page, at: CGPoint(x: 0, y: targetY))
         pdfView.go(to: destination)
         
-        if let selection = document.findString(highlight.text, withOptions: .caseInsensitive).first {
-            pdfView.setCurrentSelection(selection, animate: true)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                pdfView.clearSelection()
-            }
-        }
+
     }
 }
