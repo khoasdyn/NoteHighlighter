@@ -253,27 +253,34 @@ class HighlightablePDFView: PDFView {
         guard let topAnnotation = startAnnotations.first,
               let bottomAnnotation = endAnnotations.last else { return }
         
-        let startPt = convert(
-            CGPoint(x: topAnnotation.bounds.minX, y: topAnnotation.bounds.maxY),
-            from: startPage
-        )
-        let endPt = convert(
-            CGPoint(x: bottomAnnotation.bounds.maxX, y: bottomAnnotation.bounds.minY),
-            from: endPage
-        )
+        // Convert all four corners of first and last line
+        let startTop = convert(CGPoint(x: topAnnotation.bounds.minX, y: topAnnotation.bounds.maxY), from: startPage)
+        let startBottom = convert(CGPoint(x: topAnnotation.bounds.minX, y: topAnnotation.bounds.minY), from: startPage)
+        let endTop = convert(CGPoint(x: bottomAnnotation.bounds.maxX, y: bottomAnnotation.bounds.maxY), from: endPage)
+        let endBottom = convert(CGPoint(x: bottomAnnotation.bounds.maxX, y: bottomAnnotation.bounds.minY), from: endPage)
         
-        let handleW: CGFloat = 20
-        let handleH: CGFloat = 32
+        let handleW: CGFloat = 26
+        let circleSize: CGFloat = 16
+        let startLineH = abs(startTop.y - startBottom.y)
+        let endLineH = abs(endTop.y - endBottom.y)
         
+        let startHandleH = startLineH + circleSize
+        let endHandleH = endLineH + circleSize
+        
+        let startMinY = min(startTop.y, startBottom.y)
+        let endMinY = min(endTop.y, endBottom.y)
+        
+        // Start handle: circle on top, stick spans down through the line
         startHandle.frame = CGRect(
-            x: startPt.x - handleW / 2,
-            y: startPt.y,
-            width: handleW, height: handleH
+            x: startTop.x - handleW / 2,
+            y: startMinY,
+            width: handleW, height: startHandleH
         )
+        // End handle: stick spans the line, circle below
         endHandle.frame = CGRect(
-            x: endPt.x - handleW / 2,
-            y: endPt.y - handleH,
-            width: handleW, height: handleH
+            x: endBottom.x - handleW / 2,
+            y: endMinY - circleSize,
+            width: handleW, height: endHandleH
         )
     }
     
@@ -291,9 +298,11 @@ class HighlightablePDFView: PDFView {
         hideSelectionToolbar()
         
         if isEditing {
-            let hitRadius: CGFloat = 20
-            let startCenter = CGPoint(x: startHandle.frame.midX, y: startHandle.frame.midY)
-            let endCenter = CGPoint(x: endHandle.frame.midX, y: endHandle.frame.midY)
+            let hitRadius: CGFloat = 24
+            // Start circle is at top of its frame, end circle is at bottom
+            let circleR: CGFloat = 8
+            let startCenter = CGPoint(x: startHandle.frame.midX, y: startHandle.frame.maxY - circleR)
+            let endCenter = CGPoint(x: endHandle.frame.midX, y: endHandle.frame.minY + circleR)
             
             if dist(viewPoint, startCenter) < hitRadius {
                 dragging = .start
@@ -576,10 +585,11 @@ class HandleDotView: NSView {
     
     override func draw(_ dirtyRect: NSRect) {
         let color = NSColor.systemBlue
-        let circleSize: CGFloat = 12
-        let stickWidth: CGFloat = 2.5
+        let circleSize: CGFloat = 16
+        let stickWidth: CGFloat = 3.0
         
         if isStart {
+            // Circle at top, stick spans the line height down
             let circleRect = CGRect(
                 x: (bounds.width - circleSize) / 2,
                 y: bounds.height - circleSize,
@@ -589,12 +599,13 @@ class HandleDotView: NSView {
                 x: (bounds.width - stickWidth) / 2,
                 y: 0,
                 width: stickWidth,
-                height: bounds.height - circleSize + 2
+                height: bounds.height - circleSize + 3
             )
             color.setFill()
             NSBezierPath(rect: stickRect).fill()
             NSBezierPath(ovalIn: circleRect).fill()
         } else {
+            // Stick spans the line height up, circle at bottom
             let circleRect = CGRect(
                 x: (bounds.width - circleSize) / 2,
                 y: 0,
@@ -602,9 +613,9 @@ class HandleDotView: NSView {
             )
             let stickRect = CGRect(
                 x: (bounds.width - stickWidth) / 2,
-                y: circleSize - 2,
+                y: circleSize - 3,
                 width: stickWidth,
-                height: bounds.height - circleSize + 2
+                height: bounds.height - circleSize + 3
             )
             color.setFill()
             NSBezierPath(rect: stickRect).fill()
