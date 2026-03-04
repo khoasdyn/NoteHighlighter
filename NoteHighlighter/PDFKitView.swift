@@ -4,16 +4,17 @@ import PDFKit
 struct PDFKitView: NSViewRepresentable {
     let document: PDFDocument?
     @Binding var pdfView: PDFView?
+    var appState: AppState?
     
-    func makeNSView(context: Context) -> PDFView {
-        let view = PDFView()
+    func makeNSView(context: Context) -> HighlightablePDFView {
+        let view = HighlightablePDFView()
         view.autoScales = true
         view.displayMode = .singlePageContinuous
         view.displayDirection = .vertical
         view.backgroundColor = NSColor(white: 0.95, alpha: 1.0)
         view.displaysPageBreaks = true
+        view.appState = appState
         
-        // Store reference so AppState can navigate
         DispatchQueue.main.async {
             self.pdfView = view
         }
@@ -21,9 +22,11 @@ struct PDFKitView: NSViewRepresentable {
         return view
     }
     
-    func updateNSView(_ nsView: PDFView, context: Context) {
+    func updateNSView(_ nsView: HighlightablePDFView, context: Context) {
         if nsView.document !== document {
             nsView.document = document
+            nsView.stopEditing()
         }
+        nsView.appState = appState
     }
 }

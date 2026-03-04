@@ -153,6 +153,11 @@ struct HighlightSidebar: View {
                     .onTapGesture {
                         appState.navigateToHighlight(highlight)
                     }
+                    .contextMenu {
+                        Button("Delete Highlight", role: .destructive) {
+                            appState.removeHighlight(highlight)
+                        }
+                    }
             }
         }
         .listStyle(.sidebar)

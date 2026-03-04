@@ -13,7 +13,7 @@ struct ContentView: View {
         } detail: {
             ZStack {
                 if appState.pdfDocument != nil {
-                    PDFKitView(document: appState.pdfDocument, pdfView: $pdfViewRef)
+                    PDFKitView(document: appState.pdfDocument, pdfView: $pdfViewRef, appState: appState)
                         .onChange(of: pdfViewRef) { _, newView in
                             appState.pdfView = newView
                         }

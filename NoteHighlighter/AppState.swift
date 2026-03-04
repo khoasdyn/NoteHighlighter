@@ -61,11 +61,17 @@ class AppState: ObservableObject {
         guard let document = pdfDocument,
               let page = document.page(at: highlight.pageIndex) else { return }
         
-        // Find the matching annotation on the page
-        for annotation in page.annotations {
-            if annotation.type == "Highlight" && annotation.bounds == highlight.bounds {
+        // Remove all highlight annotations contained within the merged bounds
+        let annotationsToRemove = page.annotations.filter { annotation in
+            guard annotation.type == "Highlight" || annotation.markupType == .highlight else { return false }
+            return highlight.bounds.contains(annotation.bounds) || annotation.bounds.intersects(highlight.bounds)
+        }
+        
+        // Only remove if colors match
+        let highlightNSColor = highlight.color.nsColor
+        for annotation in annotationsToRemove {
+            if HighlightColor.from(nsColor: annotation.color) == highlight.color {
                 page.removeAnnotation(annotation)
-                break
             }
         }
         
