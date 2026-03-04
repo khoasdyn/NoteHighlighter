@@ -16,6 +16,17 @@ class HighlightablePDFView: PDFView {
     private let startHandle = HandleDotView(isStart: true)
     private let endHandle = HandleDotView(isStart: false)
     
+    // Selection toolbar
+    private lazy var selectionToolbar: SelectionToolbar = {
+        let toolbar = SelectionToolbar(frame: .zero)
+        toolbar.pdfView = self
+        toolbar.isHidden = true
+        return toolbar
+    }()
+    
+    // Track if there's a highlight under the current selection point
+    private var highlightUnderSelection: (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)?
+    
     var isEditing: Bool { editingStartPage != nil }
     
     enum DragTarget {
@@ -39,10 +50,15 @@ class HighlightablePDFView: PDFView {
         endHandle.isHidden = true
         addSubview(startHandle)
         addSubview(endHandle)
+        addSubview(selectionToolbar)
         
         NotificationCenter.default.addObserver(
             self, selector: #selector(viewportChanged),
             name: .PDFViewScaleChanged, object: self
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(selectionChanged),
+            name: .PDFViewSelectionChanged, object: self
         )
         
         DispatchQueue.main.async { [weak self] in
@@ -72,6 +88,73 @@ class HighlightablePDFView: PDFView {
     
     @objc private func viewportChanged() {
         if isEditing { repositionHandles() }
+        if !selectionToolbar.isHidden { hideSelectionToolbar() }
+    }
+    
+    @objc private func selectionChanged() {
+        // Hide toolbar when selection changes (user is still dragging)
+        if !selectionToolbar.isHidden {
+            hideSelectionToolbar()
+        }
+    }
+    
+    // MARK: - Selection toolbar
+    
+    private func showSelectionToolbar(at viewPoint: CGPoint) {
+        guard let selection = currentSelection,
+              !selection.string.isNilOrEmpty else {
+            hideSelectionToolbar()
+            return
+        }
+        
+        // Check if there's an existing highlight under the selection
+        highlightUnderSelection = highlightGroupAtPoint(viewPoint)
+        selectionToolbar.showForExistingHighlight(highlightUnderSelection != nil)
+        
+        // Size to fit
+        selectionToolbar.setFrameSize(selectionToolbar.fittingSize)
+        
+        // Position above the selection end point
+        let toolbarW = selectionToolbar.frame.width
+        let toolbarH = selectionToolbar.frame.height
+        let margin: CGFloat = 8
+        
+        var x = viewPoint.x - toolbarW / 2
+        var y = viewPoint.y + margin
+        
+        // Keep within view bounds
+        x = max(4, min(x, bounds.width - toolbarW - 4))
+        
+        // If would go above the view, show below instead
+        if y + toolbarH > bounds.height {
+            y = viewPoint.y - toolbarH - margin
+        }
+        
+        selectionToolbar.frame.origin = CGPoint(x: x, y: y)
+        selectionToolbar.isHidden = false
+    }
+    
+    func hideSelectionToolbar() {
+        selectionToolbar.isHidden = true
+        highlightUnderSelection = nil
+    }
+    
+    func copySelectionToPasteboard() {
+        guard let text = currentSelection?.string else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        clearSelection()
+    }
+    
+    func deleteHighlightUnderSelection() {
+        guard let group = highlightUnderSelection else { return }
+        for annotation in group.annotations {
+            annotation.page?.removeAnnotation(annotation)
+        }
+        clearSelection()
+        stopEditing()
+        appState?.refreshHighlights()
     }
     
     // MARK: - Editing lifecycle
@@ -79,7 +162,6 @@ class HighlightablePDFView: PDFView {
     func startEditing(highlight: Highlight) {
         guard let document = self.document else { return }
         
-        // Collect annotations across all pages in the highlight range
         editingAnnotations = []
         for pageIndex in highlight.pageIndex...highlight.endPageIndex {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -96,7 +178,6 @@ class HighlightablePDFView: PDFView {
         
         guard !editingAnnotations.isEmpty else { return }
         
-        // Find start and end pages from the annotations
         let pageAnnotationPairs = editingAnnotations.compactMap { annotation -> (PDFPage, PDFAnnotation)? in
             guard let page = annotation.page else { return nil }
             return (page, annotation)
@@ -104,7 +185,6 @@ class HighlightablePDFView: PDFView {
         
         guard !pageAnnotationPairs.isEmpty else { return }
         
-        // Sort by page index then Y position
         let sorted = pageAnnotationPairs.sorted { a, b in
             let aIdx = document.index(for: a.0)
             let bIdx = document.index(for: b.0)
@@ -115,11 +195,9 @@ class HighlightablePDFView: PDFView {
         editingStartPage = sorted.first!.0
         editingEndPage = sorted.last!.0
         
-        // Start = top-left of first annotation on first page
         let firstAnnotation = sorted.first!.1
         startPagePoint = CGPoint(x: firstAnnotation.bounds.minX, y: firstAnnotation.bounds.midY)
         
-        // End = bottom-right of last annotation on last page
         let lastAnnotation = sorted.last!.1
         endPagePoint = CGPoint(x: lastAnnotation.bounds.maxX, y: lastAnnotation.bounds.midY)
         
@@ -139,11 +217,6 @@ class HighlightablePDFView: PDFView {
     
     private func repositionHandles() {
         guard let startPage = editingStartPage, let endPage = editingEndPage else { return }
-        guard let document = self.document else { return }
-        
-        // Find topmost annotation on start page, bottommost on end page
-        let startPageIdx = document.index(for: startPage)
-        let endPageIdx = document.index(for: endPage)
         
         let startAnnotations = editingAnnotations.filter { $0.page == startPage }
             .sorted { $0.bounds.midY > $1.bounds.midY }
@@ -181,6 +254,14 @@ class HighlightablePDFView: PDFView {
     
     override func mouseDown(with event: NSEvent) {
         let viewPoint = convert(event.locationInWindow, from: nil)
+        
+        // If clicking on the toolbar, let it handle it
+        let toolbarPoint = selectionToolbar.convert(event.locationInWindow, from: nil)
+        if !selectionToolbar.isHidden && selectionToolbar.bounds.contains(toolbarPoint) {
+            return
+        }
+        
+        hideSelectionToolbar()
         
         if isEditing {
             let hitRadius: CGFloat = 20
@@ -238,35 +319,43 @@ class HighlightablePDFView: PDFView {
     }
     
     override func mouseUp(with event: NSEvent) {
-        guard dragging != .none else {
-            super.mouseUp(with: event)
+        if dragging != .none {
+            dragging = .none
+            
+            guard let startPage = editingStartPage, let endPage = editingEndPage else { return }
+            
+            let startAnnotations = editingAnnotations.filter { $0.page == startPage }
+                .sorted { $0.bounds.midY > $1.bounds.midY }
+            let endAnnotations = editingAnnotations.filter { $0.page == endPage }
+                .sorted { $0.bounds.midY > $1.bounds.midY }
+            
+            if let first = startAnnotations.first {
+                startPagePoint = CGPoint(x: first.bounds.minX, y: first.bounds.midY)
+            }
+            if let last = endAnnotations.last {
+                endPagePoint = CGPoint(x: last.bounds.maxX, y: last.bounds.midY)
+            }
+            repositionHandles()
+            appState?.refreshHighlights()
             return
         }
         
-        dragging = .none
+        super.mouseUp(with: event)
         
-        // Snap handles to actual annotation edges
-        guard let document = self.document,
-              let startPage = editingStartPage,
-              let endPage = editingEndPage else { return }
+        // After mouse up, check if there's a text selection to show toolbar
+        let viewPoint = convert(event.locationInWindow, from: nil)
         
-        let startAnnotations = editingAnnotations.filter { $0.page == startPage }
-            .sorted { $0.bounds.midY > $1.bounds.midY }
-        let endAnnotations = editingAnnotations.filter { $0.page == endPage }
-            .sorted { $0.bounds.midY > $1.bounds.midY }
-        
-        if let first = startAnnotations.first {
-            startPagePoint = CGPoint(x: first.bounds.minX, y: first.bounds.midY)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self,
+                  let selection = self.currentSelection,
+                  let text = selection.string,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            
+            self.showSelectionToolbar(at: viewPoint)
         }
-        if let last = endAnnotations.last {
-            endPagePoint = CGPoint(x: last.bounds.maxX, y: last.bounds.midY)
-        }
-        repositionHandles()
-        
-        appState?.refreshHighlights()
     }
     
-    // MARK: - Annotation rebuilding (supports cross-page)
+    // MARK: - Annotation rebuilding
     
     private func rebuildAnnotations() {
         guard let document = self.document,
@@ -276,13 +365,10 @@ class HighlightablePDFView: PDFView {
         let color = editingAnnotations.first?.color ?? NSColor.yellow
         let groupID = editingAnnotations.first?.userName
         
-        // Remove old annotations from all pages they exist on
-        let existingPages = Set(editingAnnotations.compactMap { $0.page })
         for annotation in editingAnnotations {
             annotation.page?.removeAnnotation(annotation)
         }
         
-        // Build selection from start point on start page to end point on end page
         guard let selection = document.selection(from: startPage, at: startPagePoint,
                                                   to: endPage, at: endPagePoint) else {
             editingAnnotations = []
@@ -308,7 +394,7 @@ class HighlightablePDFView: PDFView {
     
     // MARK: - Hit testing
     
-    private func highlightGroupAtPoint(_ viewPoint: CGPoint) -> (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)? {
+    func highlightGroupAtPoint(_ viewPoint: CGPoint) -> (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)? {
         guard let page = page(for: viewPoint, nearest: false) else { return nil }
         let pagePoint = convert(viewPoint, to: page)
         
@@ -331,7 +417,6 @@ class HighlightablePDFView: PDFView {
         guard let document = self.document else { return [target] }
         let targetGroupID = target.userName
         
-        // If has groupID, find all annotations with same groupID across all pages
         if let groupID = targetGroupID, !groupID.isEmpty {
             var group: [PDFAnnotation] = []
             for pageIndex in 0..<document.pageCount {
@@ -350,7 +435,6 @@ class HighlightablePDFView: PDFView {
             }
         }
         
-        // Fallback: proximity on same page
         guard let page = target.page else { return [target] }
         let targetColor = HighlightColor.from(nsColor: target.color)
         
@@ -389,8 +473,6 @@ class HighlightablePDFView: PDFView {
     }
     
     private func switchToGroup(_ group: (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)) {
-        guard let document = self.document else { return }
-        
         editingAnnotations = group.annotations
         editingStartPage = group.startPage
         editingEndPage = group.endPage
@@ -410,10 +492,37 @@ class HighlightablePDFView: PDFView {
         startHandle.isHidden = false
         endHandle.isHidden = false
         repositionHandles()
+        
+        // Show toolbar for existing highlight
+        highlightUnderSelection = group
+        selectionToolbar.showForExistingHighlight(true)
+        selectionToolbar.setFrameSize(selectionToolbar.fittingSize)
+        
+        // Position toolbar near the end handle
+        let endPt = CGPoint(x: endHandle.frame.midX, y: endHandle.frame.minY)
+        let toolbarW = selectionToolbar.frame.width
+        let toolbarH = selectionToolbar.frame.height
+        var x = endPt.x - toolbarW / 2
+        var y = endPt.y - toolbarH - 8
+        x = max(4, min(x, bounds.width - toolbarW - 4))
+        if y < 4 { y = endHandle.frame.maxY + 8 }
+        selectionToolbar.frame.origin = CGPoint(x: x, y: y)
+        selectionToolbar.isHidden = false
     }
     
     private func dist(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2))
+    }
+}
+
+// MARK: - Optional string helper
+
+private extension Optional where Wrapped == String {
+    var isNilOrEmpty: Bool {
+        switch self {
+        case .none: return true
+        case .some(let str): return str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }
 
@@ -437,7 +546,6 @@ class HandleDotView: NSView {
     
     override func draw(_ dirtyRect: NSRect) {
         let color = NSColor.systemBlue
-        
         let circleSize: CGFloat = 12
         let stickWidth: CGFloat = 2.5
         
@@ -453,7 +561,6 @@ class HandleDotView: NSView {
                 width: stickWidth,
                 height: bounds.height - circleSize + 2
             )
-            
             color.setFill()
             NSBezierPath(rect: stickRect).fill()
             NSBezierPath(ovalIn: circleRect).fill()
@@ -469,7 +576,6 @@ class HandleDotView: NSView {
                 width: stickWidth,
                 height: bounds.height - circleSize + 2
             )
-            
             color.setFill()
             NSBezierPath(rect: stickRect).fill()
             NSBezierPath(ovalIn: circleRect).fill()

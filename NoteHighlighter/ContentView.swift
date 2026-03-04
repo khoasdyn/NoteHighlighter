@@ -42,39 +42,6 @@ struct ContentView: View {
                 }
                 
                 if appState.pdfDocument != nil {
-                    // Color picker for highlight color
-                    Menu {
-                        ForEach(HighlightColor.allCases.filter { $0 != .unknown }, id: \.self) { color in
-                            Button {
-                                appState.currentHighlightColor = color
-                            } label: {
-                                HStack {
-                                    Image(systemName: appState.currentHighlightColor == color ? "checkmark.circle.fill" : "circle.fill")
-                                        .foregroundStyle(color.swiftUIColor)
-                                    Text(color.displayName)
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "highlighter")
-                            Circle()
-                                .fill(appState.currentHighlightColor.swiftUIColor)
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                    .help("Highlight color")
-                    
-                    // Add highlight button
-                    Button {
-                        appState.addHighlightFromSelection()
-                    } label: {
-                        Label("Highlight Selection", systemImage: "plus.circle")
-                    }
-                    .help("Highlight selected text (⌘⇧H)")
-                    .keyboardShortcut("h", modifiers: [.command, .shift])
-                    
-                    // Save button
                     Button {
                         appState.savePDF()
                     } label: {
@@ -82,7 +49,6 @@ struct ContentView: View {
                     }
                     .help("Save PDF (⌘S)")
                     .keyboardShortcut("s", modifiers: .command)
-                    
                 }
             }
         }
