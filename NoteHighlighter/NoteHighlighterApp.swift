@@ -3,9 +3,9 @@ import SwiftData
 
 @main
 struct NoteHighlighterApp: App {
-    @StateObject private var appState = AppState()
-    let modelContainer: ModelContainer
-    
+    @State private var appState = AppState()
+    private let modelContainer: ModelContainer
+
     init() {
         do {
             modelContainer = try ModelContainer(for: BookItem.self, SavedHighlight.self)
@@ -13,7 +13,7 @@ struct NoteHighlighterApp: App {
             fatalError("Failed to create ModelContainer: \(error)")
         }
     }
-    
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -25,7 +25,7 @@ struct NoteHighlighterApp: App {
                     }
                 }
             }
-            .environmentObject(appState)
+            .environment(appState)
             .onAppear {
                 appState.modelContext = modelContainer.mainContext
             }

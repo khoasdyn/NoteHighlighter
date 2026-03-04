@@ -1,56 +1,54 @@
 import PDFKit
 
-struct HighlightExtractor {
-    
-    static func extractHighlights(from document: PDFDocument) -> [Highlight] {
-        var grouped: [String: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String)]] = [:]
+enum HighlightExtractor {
 
-        
+    static func extractHighlights(from document: PDFDocument) -> [Highlight] {
+        var grouped: [String: [AnnotationEntry]] = [:]
+
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
-            
+
             for annotation in page.annotations {
-                guard annotation.type == "Highlight" ||
-                      annotation.markupType == .highlight else { continue }
-                
+                guard annotation.isHighlightAnnotation else { continue }
+
                 let bounds = annotation.bounds
                 let text = page.selection(for: bounds)?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 guard !text.isEmpty else { continue }
-                
+
                 let color = HighlightColor.from(nsColor: annotation.color)
-                let note = annotation.contents?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let cleanNote = (note?.isEmpty == true) ? nil : note
+                let rawNote = annotation.contents?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let note = (rawNote?.isEmpty == true) ? nil : rawNote
                 let pageLabel = page.label ?? "\(pageIndex + 1)"
-                
-                let entry = (pageIndex: pageIndex, pageLabel: pageLabel, color: color, note: cleanNote, bounds: bounds, text: text)
-                
+
+                let entry = AnnotationEntry(
+                    pageIndex: pageIndex, pageLabel: pageLabel,
+                    color: color, note: note, bounds: bounds, text: text
+                )
+
                 if let groupID = annotation.userName, !groupID.isEmpty {
                     grouped[groupID, default: []].append(entry)
                 }
-                // Skip ungrouped annotations — these are pre-existing highlights
-                // from other PDF readers, not created by NoteHighlighter
             }
         }
-        
+
         var highlights: [Highlight] = []
-        
-        // Process grouped annotations (may span multiple pages)
+
         for (groupID, entries) in grouped {
             let sorted = entries.sorted { a, b in
                 if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
                 return a.bounds.midY > b.bounds.midY
             }
-            
-            guard let first = sorted.first, let last = sorted.last else { continue }
-            
-            var mergedBounds = first.bounds
-            var mergedTexts: [String] = []
-            var mergedNote: String? = nil
+
+            guard let first = sorted.first else { continue }
+
             let startPage = sorted.min(by: { $0.pageIndex < $1.pageIndex })!.pageIndex
             let endPage = sorted.max(by: { $0.pageIndex < $1.pageIndex })!.pageIndex
-            
+
+            var mergedBounds = first.bounds
+            var mergedTexts: [String] = []
+            var mergedNote: String?
+
             for entry in sorted {
-                // Only union bounds for same-page entries (cross-page bounds are meaningless)
                 if entry.pageIndex == first.pageIndex {
                     mergedBounds = mergedBounds.union(entry.bounds)
                 }
@@ -63,13 +61,13 @@ struct HighlightExtractor {
                     }
                 }
             }
-            
+
             let fullText = mergedTexts.joined(separator: " ")
                 .replacingOccurrences(of: "  ", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            
+
             guard !fullText.isEmpty else { continue }
-            
+
             highlights.append(Highlight(
                 text: fullText,
                 pageIndex: startPage,
@@ -82,14 +80,25 @@ struct HighlightExtractor {
                 groupID: groupID
             ))
         }
-        
 
-        
         highlights.sort { a, b in
             if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
             return a.bounds.midY > b.bounds.midY
         }
-        
+
         return highlights
+    }
+}
+
+// MARK: - Internal types
+
+private extension HighlightExtractor {
+    struct AnnotationEntry {
+        let pageIndex: Int
+        let pageLabel: String
+        let color: HighlightColor
+        let note: String?
+        let bounds: CGRect
+        let text: String
     }
 }

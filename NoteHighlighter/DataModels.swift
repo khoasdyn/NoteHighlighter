@@ -3,20 +3,19 @@ import Foundation
 import CoreGraphics
 
 @Model
-class BookItem {
+final class BookItem {
     var title: String
     var fileName: String
     var dateAdded: Date
     @Attribute(.externalStorage) var thumbnailData: Data?
-    
+
     @Relationship(deleteRule: .cascade, inverse: \SavedHighlight.book)
     var highlights: [SavedHighlight] = []
-    
-    /// Count of logical highlights (unique groups, not individual annotation lines)
+
     var highlightCount: Int {
         Set(highlights.map(\.groupID)).count
     }
-    
+
     init(title: String, fileName: String, dateAdded: Date = .now, thumbnailData: Data? = nil) {
         self.title = title
         self.fileName = fileName
@@ -26,7 +25,7 @@ class BookItem {
 }
 
 @Model
-class SavedHighlight {
+final class SavedHighlight {
     var text: String
     var pageIndex: Int
     var pageLabel: String
@@ -38,9 +37,9 @@ class SavedHighlight {
     var boundsHeight: Double
     var groupID: String
     var dateCreated: Date
-    
+
     var book: BookItem?
-    
+
     init(text: String, pageIndex: Int, pageLabel: String, colorName: String, note: String? = nil,
          boundsX: Double, boundsY: Double, boundsWidth: Double, boundsHeight: Double,
          groupID: String, dateCreated: Date = .now) {
@@ -56,7 +55,7 @@ class SavedHighlight {
         self.groupID = groupID
         self.dateCreated = dateCreated
     }
-    
+
     var bounds: CGRect {
         CGRect(x: boundsX, y: boundsY, width: boundsWidth, height: boundsHeight)
     }

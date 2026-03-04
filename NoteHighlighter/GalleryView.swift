@@ -3,15 +3,17 @@ import SwiftData
 import UniformTypeIdentifiers
 
 struct GalleryView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \BookItem.dateAdded, order: .reverse) private var books: [BookItem]
-    
+
     private let columns = [
         GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 20)
     ]
-    
+
     var body: some View {
+        @Bindable var appState = appState
+
         Group {
             if books.isEmpty {
                 emptyState
@@ -54,23 +56,23 @@ struct GalleryView: View {
             handleImport(result)
         }
     }
-    
+
     // MARK: - Empty state
-    
+
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "books.vertical")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
-            
+
             Text("No books yet")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            
+
             Text("Import a PDF to get started")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
-            
+
             Button("Import PDF...") {
                 appState.showFileImporter = true
             }
@@ -79,21 +81,21 @@ struct GalleryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     // MARK: - Actions
-    
+
     private func handleImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else { return }
-        
+
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-        
+
         do {
             let fileName = try BookStorage.shared.copyPDF(from: url)
             let title = url.deletingPathExtension().lastPathComponent
             let storedURL = BookStorage.shared.pdfURL(for: fileName)
             let thumbnail = BookStorage.shared.generateThumbnail(for: storedURL)
-            
+
             let book = BookItem(title: title, fileName: fileName, thumbnailData: thumbnail)
             modelContext.insert(book)
             try modelContext.save()
@@ -101,11 +103,11 @@ struct GalleryView: View {
             print("Import error: \(error)")
         }
     }
-    
+
     private func openBook(_ book: BookItem) {
         appState.openBook(book)
     }
-    
+
     private func deleteBook(_ book: BookItem) {
         BookStorage.shared.deletePDF(fileName: book.fileName)
         modelContext.delete(book)
@@ -115,12 +117,11 @@ struct GalleryView: View {
 
 // MARK: - Book card
 
-struct BookCard: View {
+private struct BookCard: View {
     let book: BookItem
-    
+
     var body: some View {
         VStack(spacing: 8) {
-            // Thumbnail
             Group {
                 if let data = book.thumbnailData, let nsImage = NSImage(data: data) {
                     Image(nsImage: nsImage)
@@ -139,15 +140,13 @@ struct BookCard: View {
             .frame(width: 160, height: 220)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-            
-            // Title
+
             Text(book.title)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: 160)
-            
-            // Highlight count
+
             let count = book.highlightCount
             Text("\(count) highlight\(count == 1 ? "" : "s")")
                 .font(.system(size: 11))

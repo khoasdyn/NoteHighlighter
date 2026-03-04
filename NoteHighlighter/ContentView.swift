@@ -2,13 +2,12 @@ import SwiftUI
 import PDFKit
 
 struct ContentView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) private var appState
     @State private var pdfViewRef: PDFView?
-    
+
     var body: some View {
         NavigationSplitView {
             HighlightSidebar()
-                .environmentObject(appState)
         } detail: {
             if appState.pdfDocument != nil {
                 PDFKitView(document: appState.pdfDocument, pdfView: $pdfViewRef, appState: appState)
