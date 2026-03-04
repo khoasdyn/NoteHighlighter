@@ -1,8 +1,10 @@
 import SwiftUI
 import PDFKit
+import SwiftData
 import Combine
 
 class AppState: ObservableObject {
+    @Published var currentBook: BookItem?
     @Published var pdfDocument: PDFDocument?
     @Published var highlights: [Highlight] = []
     @Published var selectedHighlight: Highlight?
@@ -14,22 +16,105 @@ class AppState: ObservableObject {
     /// Reference to the PDFView so we can navigate to highlights
     weak var pdfView: PDFView?
     
-    func loadPDF(from url: URL) {
+    /// SwiftData model context for persistence
+    var modelContext: ModelContext?
+    
+    // MARK: - Book lifecycle
+    
+    func openBook(_ book: BookItem) {
+        let url = BookStorage.shared.pdfURL(for: book.fileName)
         guard let document = PDFDocument(url: url) else {
-            print("Failed to load PDF from \(url)")
+            print("Failed to load PDF for book: \(book.title)")
             return
         }
         
+        self.currentBook = book
         self.pdfDocument = document
         self.pdfFileURL = url
-        self.fileName = url.deletingPathExtension().lastPathComponent
-        self.highlights = HighlightExtractor.extractHighlights(from: document)
+        self.fileName = book.title
         self.selectedHighlight = nil
+        
+        loadHighlights()
     }
+    
+    func closeBook() {
+        saveHighlights()
+        currentBook = nil
+        pdfDocument = nil
+        pdfFileURL = nil
+        highlights = []
+        selectedHighlight = nil
+        fileName = ""
+        pdfView = nil
+    }
+    
+    // MARK: - Highlight persistence
+    
+    func loadHighlights() {
+        guard let book = currentBook, let document = pdfDocument else { return }
+        
+        for saved in book.highlights {
+            guard let page = document.page(at: saved.pageIndex) else { continue }
+            
+            let annotation = PDFAnnotation(bounds: saved.bounds, forType: .highlight, withProperties: nil)
+            let color = HighlightColor(rawValue: saved.colorName) ?? .yellow
+            annotation.color = color.nsColor
+            annotation.userName = saved.groupID
+            page.addAnnotation(annotation)
+        }
+        
+        self.highlights = HighlightExtractor.extractHighlights(from: document)
+    }
+    
+    func saveHighlights() {
+        guard let context = modelContext,
+              let book = currentBook,
+              let document = pdfDocument else { return }
+        
+        // Delete existing saved highlights
+        let existing = Array(book.highlights)
+        for h in existing {
+            context.delete(h)
+        }
+        
+        // Save all app-created annotations (those with a groupID)
+        for pageIndex in 0..<document.pageCount {
+            guard let page = document.page(at: pageIndex) else { continue }
+            
+            for annotation in page.annotations {
+                guard annotation.type == "Highlight" || annotation.markupType == .highlight,
+                      let groupID = annotation.userName, !groupID.isEmpty else { continue }
+                
+                let text = page.selection(for: annotation.bounds)?
+                    .string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let colorName = HighlightColor.from(nsColor: annotation.color).rawValue
+                let pageLabel = page.label ?? "\(pageIndex + 1)"
+                
+                let saved = SavedHighlight(
+                    text: text,
+                    pageIndex: pageIndex,
+                    pageLabel: pageLabel,
+                    colorName: colorName,
+                    boundsX: annotation.bounds.origin.x,
+                    boundsY: annotation.bounds.origin.y,
+                    boundsWidth: annotation.bounds.width,
+                    boundsHeight: annotation.bounds.height,
+                    groupID: groupID
+                )
+                saved.book = book
+                context.insert(saved)
+            }
+        }
+        
+        try? context.save()
+    }
+    
+    // MARK: - Highlight operations
     
     func refreshHighlights() {
         guard let document = pdfDocument else { return }
         self.highlights = HighlightExtractor.extractHighlights(from: document)
+        saveHighlights()
     }
     
     func addHighlightFromSelection() {
@@ -39,7 +124,6 @@ class AppState: ObservableObject {
         let color = currentHighlightColor.nsColor
         let groupID = UUID().uuidString
         
-        // Break selection into individual lines for proper per-line highlight rects
         let lineSelections = selection.selectionsByLine()
         guard !lineSelections.isEmpty else { return }
         
@@ -84,7 +168,6 @@ class AppState: ObservableObject {
         
         refreshHighlights()
     }
-    
     
     func navigateToHighlight(_ highlight: Highlight) {
         selectedHighlight = highlight
