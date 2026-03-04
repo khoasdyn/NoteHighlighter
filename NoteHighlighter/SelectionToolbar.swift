@@ -165,7 +165,14 @@ class SelectionToolbar: NSView {
     @objc private func colorTapped(_ sender: NSButton) {
         let colorInfo = colors[sender.tag]
         pdfView?.appState?.currentHighlightColor = colorInfo.0
-        pdfView?.appState?.addHighlightFromSelection()
+        
+        if pdfView?.isEditing == true {
+            // Change color of existing highlight
+            pdfView?.changeEditingHighlightColor(colorInfo.0)
+        } else {
+            // Create new highlight from selection
+            pdfView?.appState?.addHighlightFromSelection()
+        }
         pdfView?.hideSelectionToolbar()
     }
     

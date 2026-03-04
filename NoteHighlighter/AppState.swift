@@ -85,10 +85,6 @@ class AppState: ObservableObject {
         refreshHighlights()
     }
     
-    func savePDF() {
-        guard let document = pdfDocument, let url = pdfFileURL else { return }
-        document.write(to: url)
-    }
     
     func navigateToHighlight(_ highlight: Highlight) {
         selectedHighlight = highlight

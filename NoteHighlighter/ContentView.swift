@@ -33,25 +33,6 @@ struct ContentView: View {
         .onDrop(of: [.pdf, .fileURL], isTargeted: nil) { providers in
             handleDrop(providers)
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    appState.showFileImporter = true
-                } label: {
-                    Label("Open PDF", systemImage: "doc.badge.plus")
-                }
-                
-                if appState.pdfDocument != nil {
-                    Button {
-                        appState.savePDF()
-                    } label: {
-                        Label("Save", systemImage: "square.and.arrow.down")
-                    }
-                    .help("Save PDF (⌘S)")
-                    .keyboardShortcut("s", modifiers: .command)
-                }
-            }
-        }
     }
     
     // MARK: - Welcome view
@@ -87,7 +68,6 @@ struct ContentView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             
-            // Need to start accessing the security-scoped resource
             let accessing = url.startAccessingSecurityScopedResource()
             defer {
                 if accessing { url.stopAccessingSecurityScopedResource() }
@@ -114,5 +94,4 @@ struct ContentView: View {
         }
         return true
     }
-
 }

@@ -8,6 +8,8 @@ class HighlightablePDFView: PDFView {
     private(set) var editingAnnotations: [PDFAnnotation] = []
     private(set) var editingStartPage: PDFPage?
     private(set) var editingEndPage: PDFPage?
+    private var editingColor: NSColor?
+    private var editingGroupID: String?
     private var startPagePoint: CGPoint = .zero
     private var endPagePoint: CGPoint = .zero
     private var dragging: DragTarget = .none
@@ -147,6 +149,27 @@ class HighlightablePDFView: PDFView {
         clearSelection()
     }
     
+    func changeEditingHighlightColor(_ highlightColor: HighlightColor) {
+        guard !editingAnnotations.isEmpty else { return }
+        
+        let newColor = highlightColor.nsColor
+        editingColor = newColor
+        for annotation in editingAnnotations {
+            annotation.color = newColor
+        }
+        
+        // Force redraw
+        for annotation in editingAnnotations {
+            if let page = annotation.page {
+                page.removeAnnotation(annotation)
+                page.addAnnotation(annotation)
+            }
+        }
+        
+        stopEditing()
+        appState?.refreshHighlights()
+    }
+    
     func deleteHighlightUnderSelection() {
         guard let group = highlightUnderSelection else { return }
         for annotation in group.annotations {
@@ -194,6 +217,8 @@ class HighlightablePDFView: PDFView {
         
         editingStartPage = sorted.first!.0
         editingEndPage = sorted.last!.0
+        editingColor = editingAnnotations.first?.color
+        editingGroupID = editingAnnotations.first?.userName
         
         let firstAnnotation = sorted.first!.1
         startPagePoint = CGPoint(x: firstAnnotation.bounds.minX, y: firstAnnotation.bounds.midY)
@@ -210,6 +235,8 @@ class HighlightablePDFView: PDFView {
         editingAnnotations = []
         editingStartPage = nil
         editingEndPage = nil
+        editingColor = nil
+        editingGroupID = nil
         dragging = .none
         startHandle.isHidden = true
         endHandle.isHidden = true
@@ -362,8 +389,8 @@ class HighlightablePDFView: PDFView {
               let startPage = editingStartPage,
               let endPage = editingEndPage else { return }
         
-        let color = editingAnnotations.first?.color ?? NSColor.yellow
-        let groupID = editingAnnotations.first?.userName
+        let color = editingColor ?? editingAnnotations.first?.color ?? HighlightColor.yellow.nsColor
+        let groupID = editingGroupID ?? editingAnnotations.first?.userName
         
         for annotation in editingAnnotations {
             annotation.page?.removeAnnotation(annotation)
@@ -488,6 +515,9 @@ class HighlightablePDFView: PDFView {
         if let last = endAnnotations.last {
             endPagePoint = CGPoint(x: last.bounds.maxX, y: last.bounds.midY)
         }
+        
+        editingColor = group.annotations.first?.color
+        editingGroupID = group.annotations.first?.userName
         
         startHandle.isHidden = false
         endHandle.isHidden = false
