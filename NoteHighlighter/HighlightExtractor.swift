@@ -3,7 +3,8 @@ import PDFKit
 struct HighlightExtractor {
     
     static func extractHighlights(from document: PDFDocument) -> [Highlight] {
-        var rawEntries: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String, groupID: String?)] = []
+        var grouped: [String: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String)]] = [:]
+        var ungrouped: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String)] = []
         
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -21,54 +22,89 @@ struct HighlightExtractor {
                 let cleanNote = (note?.isEmpty == true) ? nil : note
                 let pageLabel = page.label ?? "\(pageIndex + 1)"
                 
-                rawEntries.append((
-                    pageIndex: pageIndex,
-                    pageLabel: pageLabel,
-                    color: color,
-                    note: cleanNote,
-                    bounds: bounds,
-                    text: text,
-                    groupID: annotation.userName
-                ))
+                let entry = (pageIndex: pageIndex, pageLabel: pageLabel, color: color, note: cleanNote, bounds: bounds, text: text)
+                
+                if let groupID = annotation.userName, !groupID.isEmpty {
+                    grouped[groupID, default: []].append(entry)
+                } else {
+                    ungrouped.append(entry)
+                }
             }
         }
         
-        // Sort: page first, then top-to-bottom
-        rawEntries.sort { a, b in
+        var highlights: [Highlight] = []
+        
+        // Process grouped annotations (may span multiple pages)
+        for (groupID, entries) in grouped {
+            let sorted = entries.sorted { a, b in
+                if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
+                return a.bounds.midY > b.bounds.midY
+            }
+            
+            guard let first = sorted.first, let last = sorted.last else { continue }
+            
+            var mergedBounds = first.bounds
+            var mergedTexts: [String] = []
+            var mergedNote: String? = nil
+            let startPage = sorted.min(by: { $0.pageIndex < $1.pageIndex })!.pageIndex
+            let endPage = sorted.max(by: { $0.pageIndex < $1.pageIndex })!.pageIndex
+            
+            for entry in sorted {
+                // Only union bounds for same-page entries (cross-page bounds are meaningless)
+                if entry.pageIndex == first.pageIndex {
+                    mergedBounds = mergedBounds.union(entry.bounds)
+                }
+                mergedTexts.append(entry.text)
+                if let note = entry.note, !note.isEmpty {
+                    if let existing = mergedNote {
+                        mergedNote = existing + " " + note
+                    } else {
+                        mergedNote = note
+                    }
+                }
+            }
+            
+            let fullText = mergedTexts.joined(separator: " ")
+                .replacingOccurrences(of: "  ", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            guard !fullText.isEmpty else { continue }
+            
+            highlights.append(Highlight(
+                text: fullText,
+                pageIndex: startPage,
+                endPageIndex: endPage,
+                pageLabel: first.pageLabel,
+                color: first.color,
+                note: mergedNote,
+                bounds: mergedBounds,
+                creationDate: nil,
+                groupID: groupID
+            ))
+        }
+        
+        // Process ungrouped annotations (imported PDFs) with proximity merging
+        ungrouped.sort { a, b in
             if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
             return a.bounds.midY > b.bounds.midY
         }
         
-        // Group entries: if annotations have a groupID, group by that.
-        // Otherwise fall back to proximity + color merging (for imported PDFs).
-        var highlights: [Highlight] = []
         var i = 0
-        
-        while i < rawEntries.count {
-            let current = rawEntries[i]
+        while i < ungrouped.count {
+            let current = ungrouped[i]
             var mergedBounds = current.bounds
             var mergedTexts: [String] = [current.text]
             var mergedNote = current.note
             var j = i + 1
             
-            while j < rawEntries.count {
-                let next = rawEntries[j]
+            while j < ungrouped.count {
+                let next = ungrouped[j]
                 guard next.pageIndex == current.pageIndex,
                       next.color == current.color else { break }
                 
-                // If both have groupIDs, only merge if they match
-                if let currentGroup = current.groupID, !currentGroup.isEmpty,
-                   let nextGroup = next.groupID, !nextGroup.isEmpty {
-                    guard currentGroup == nextGroup else { break }
-                } else if current.groupID != nil || next.groupID != nil {
-                    // One has a groupID and the other doesn't — don't merge
-                    break
-                } else {
-                    // Neither has a groupID (imported PDF) — use proximity
-                    let gap = abs(mergedBounds.minY - next.bounds.maxY)
-                    let lineHeight = max(mergedBounds.height, next.bounds.height)
-                    guard gap < lineHeight * 1.5 else { break }
-                }
+                let gap = abs(mergedBounds.minY - next.bounds.maxY)
+                let lineHeight = max(mergedBounds.height, next.bounds.height)
+                guard gap < lineHeight * 1.5 else { break }
                 
                 mergedBounds = mergedBounds.union(next.bounds)
                 mergedTexts.append(next.text)
@@ -88,24 +124,26 @@ struct HighlightExtractor {
                 .replacingOccurrences(of: "  ", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
-            guard !fullText.isEmpty else {
-                i = j
-                continue
+            if !fullText.isEmpty {
+                highlights.append(Highlight(
+                    text: fullText,
+                    pageIndex: current.pageIndex,
+                    endPageIndex: current.pageIndex,
+                    pageLabel: current.pageLabel,
+                    color: current.color,
+                    note: mergedNote,
+                    bounds: mergedBounds,
+                    creationDate: nil,
+                    groupID: nil
+                ))
             }
             
-            let highlight = Highlight(
-                text: fullText,
-                pageIndex: current.pageIndex,
-                pageLabel: current.pageLabel,
-                color: current.color,
-                note: mergedNote,
-                bounds: mergedBounds,
-                creationDate: nil,
-                groupID: current.groupID
-            )
-            
-            highlights.append(highlight)
             i = j
+        }
+        
+        highlights.sort { a, b in
+            if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
+            return a.bounds.midY > b.bounds.midY
         }
         
         return highlights

@@ -6,7 +6,8 @@ class HighlightablePDFView: PDFView {
     
     // Editing state
     private(set) var editingAnnotations: [PDFAnnotation] = []
-    private(set) var editingPage: PDFPage?
+    private(set) var editingStartPage: PDFPage?
+    private(set) var editingEndPage: PDFPage?
     private var startPagePoint: CGPoint = .zero
     private var endPagePoint: CGPoint = .zero
     private var dragging: DragTarget = .none
@@ -15,7 +16,7 @@ class HighlightablePDFView: PDFView {
     private let startHandle = HandleDotView(isStart: true)
     private let endHandle = HandleDotView(isStart: false)
     
-    var isEditing: Bool { editingPage != nil }
+    var isEditing: Bool { editingStartPage != nil }
     
     enum DragTarget {
         case none, start, end
@@ -76,23 +77,51 @@ class HighlightablePDFView: PDFView {
     // MARK: - Editing lifecycle
     
     func startEditing(highlight: Highlight) {
-        guard let document = self.document,
-              let page = document.page(at: highlight.pageIndex) else { return }
+        guard let document = self.document else { return }
         
-        editingAnnotations = page.annotations.filter { annotation in
-            guard annotation.type == "Highlight" || annotation.markupType == .highlight else { return false }
-            guard HighlightColor.from(nsColor: annotation.color) == highlight.color else { return false }
-            return highlight.bounds.contains(annotation.bounds) || annotation.bounds.intersects(highlight.bounds)
+        // Collect annotations across all pages in the highlight range
+        editingAnnotations = []
+        for pageIndex in highlight.pageIndex...highlight.endPageIndex {
+            guard let page = document.page(at: pageIndex) else { continue }
+            let matching = page.annotations.filter { annotation in
+                guard annotation.type == "Highlight" || annotation.markupType == .highlight else { return false }
+                guard HighlightColor.from(nsColor: annotation.color) == highlight.color else { return false }
+                if let groupID = highlight.groupID, !groupID.isEmpty {
+                    return annotation.userName == groupID
+                }
+                return highlight.bounds.contains(annotation.bounds) || annotation.bounds.intersects(annotation.bounds)
+            }
+            editingAnnotations.append(contentsOf: matching)
         }
         
         guard !editingAnnotations.isEmpty else { return }
-        editingPage = page
         
-        let sorted = editingAnnotations.sorted { $0.bounds.midY > $1.bounds.midY }
+        // Find start and end pages from the annotations
+        let pageAnnotationPairs = editingAnnotations.compactMap { annotation -> (PDFPage, PDFAnnotation)? in
+            guard let page = annotation.page else { return nil }
+            return (page, annotation)
+        }
         
-        // Start = left edge of topmost line, end = right edge of bottommost line
-        startPagePoint = CGPoint(x: sorted.first!.bounds.minX, y: sorted.first!.bounds.midY)
-        endPagePoint = CGPoint(x: sorted.last!.bounds.maxX, y: sorted.last!.bounds.midY)
+        guard !pageAnnotationPairs.isEmpty else { return }
+        
+        // Sort by page index then Y position
+        let sorted = pageAnnotationPairs.sorted { a, b in
+            let aIdx = document.index(for: a.0)
+            let bIdx = document.index(for: b.0)
+            if aIdx != bIdx { return aIdx < bIdx }
+            return a.1.bounds.midY > b.1.bounds.midY
+        }
+        
+        editingStartPage = sorted.first!.0
+        editingEndPage = sorted.last!.0
+        
+        // Start = top-left of first annotation on first page
+        let firstAnnotation = sorted.first!.1
+        startPagePoint = CGPoint(x: firstAnnotation.bounds.minX, y: firstAnnotation.bounds.midY)
+        
+        // End = bottom-right of last annotation on last page
+        let lastAnnotation = sorted.last!.1
+        endPagePoint = CGPoint(x: lastAnnotation.bounds.maxX, y: lastAnnotation.bounds.midY)
         
         startHandle.isHidden = false
         endHandle.isHidden = false
@@ -101,39 +130,46 @@ class HighlightablePDFView: PDFView {
     
     func stopEditing() {
         editingAnnotations = []
-        editingPage = nil
+        editingStartPage = nil
+        editingEndPage = nil
         dragging = .none
         startHandle.isHidden = true
         endHandle.isHidden = true
     }
     
     private func repositionHandles() {
-        guard let page = editingPage else { return }
+        guard let startPage = editingStartPage, let endPage = editingEndPage else { return }
+        guard let document = self.document else { return }
         
-        let sorted = editingAnnotations.sorted { $0.bounds.midY > $1.bounds.midY }
-        guard let topAnnotation = sorted.first, let bottomAnnotation = sorted.last else { return }
+        // Find topmost annotation on start page, bottommost on end page
+        let startPageIdx = document.index(for: startPage)
+        let endPageIdx = document.index(for: endPage)
         
-        // Start handle: left of top line, positioned at top edge
+        let startAnnotations = editingAnnotations.filter { $0.page == startPage }
+            .sorted { $0.bounds.midY > $1.bounds.midY }
+        let endAnnotations = editingAnnotations.filter { $0.page == endPage }
+            .sorted { $0.bounds.midY > $1.bounds.midY }
+        
+        guard let topAnnotation = startAnnotations.first,
+              let bottomAnnotation = endAnnotations.last else { return }
+        
         let startPt = convert(
             CGPoint(x: topAnnotation.bounds.minX, y: topAnnotation.bounds.maxY),
-            from: page
+            from: startPage
         )
-        // End handle: right of bottom line, positioned at bottom edge
         let endPt = convert(
             CGPoint(x: bottomAnnotation.bounds.maxX, y: bottomAnnotation.bounds.minY),
-            from: page
+            from: endPage
         )
         
         let handleW: CGFloat = 20
         let handleH: CGFloat = 32
         
-        // Start handle sits above the start point
         startHandle.frame = CGRect(
             x: startPt.x - handleW / 2,
             y: startPt.y,
             width: handleW, height: handleH
         )
-        // End handle hangs below the end point
         endHandle.frame = CGRect(
             x: endPt.x - handleW / 2,
             y: endPt.y - handleH,
@@ -176,18 +212,25 @@ class HighlightablePDFView: PDFView {
     }
     
     override func mouseDragged(with event: NSEvent) {
-        guard dragging != .none, let page = editingPage else {
+        guard dragging != .none else {
             super.mouseDragged(with: event)
             return
         }
         
         let viewPoint = convert(event.locationInWindow, from: nil)
-        let pagePoint = convert(viewPoint, to: page)
         
         switch dragging {
-        case .start: startPagePoint = pagePoint
-        case .end:   endPagePoint = pagePoint
-        case .none:  break
+        case .start:
+            if let page = page(for: viewPoint, nearest: true) {
+                startPagePoint = convert(viewPoint, to: page)
+                editingStartPage = page
+            }
+        case .end:
+            if let page = page(for: viewPoint, nearest: true) {
+                endPagePoint = convert(viewPoint, to: page)
+                editingEndPage = page
+            }
+        case .none: break
         }
         
         rebuildAnnotations()
@@ -203,11 +246,19 @@ class HighlightablePDFView: PDFView {
         dragging = .none
         
         // Snap handles to actual annotation edges
-        let sorted = editingAnnotations.sorted { $0.bounds.midY > $1.bounds.midY }
-        if let first = sorted.first {
+        guard let document = self.document,
+              let startPage = editingStartPage,
+              let endPage = editingEndPage else { return }
+        
+        let startAnnotations = editingAnnotations.filter { $0.page == startPage }
+            .sorted { $0.bounds.midY > $1.bounds.midY }
+        let endAnnotations = editingAnnotations.filter { $0.page == endPage }
+            .sorted { $0.bounds.midY > $1.bounds.midY }
+        
+        if let first = startAnnotations.first {
             startPagePoint = CGPoint(x: first.bounds.minX, y: first.bounds.midY)
         }
-        if let last = sorted.last {
+        if let last = endAnnotations.last {
             endPagePoint = CGPoint(x: last.bounds.maxX, y: last.bounds.midY)
         }
         repositionHandles()
@@ -215,29 +266,41 @@ class HighlightablePDFView: PDFView {
         appState?.refreshHighlights()
     }
     
-    // MARK: - Annotation rebuilding
+    // MARK: - Annotation rebuilding (supports cross-page)
     
     private func rebuildAnnotations() {
-        guard let page = editingPage,
-              let selection = page.selection(from: startPagePoint, to: endPagePoint) else { return }
+        guard let document = self.document,
+              let startPage = editingStartPage,
+              let endPage = editingEndPage else { return }
         
         let color = editingAnnotations.first?.color ?? NSColor.yellow
         let groupID = editingAnnotations.first?.userName
         
+        // Remove old annotations from all pages they exist on
+        let existingPages = Set(editingAnnotations.compactMap { $0.page })
         for annotation in editingAnnotations {
-            page.removeAnnotation(annotation)
+            annotation.page?.removeAnnotation(annotation)
+        }
+        
+        // Build selection from start point on start page to end point on end page
+        guard let selection = document.selection(from: startPage, at: startPagePoint,
+                                                  to: endPage, at: endPagePoint) else {
+            editingAnnotations = []
+            return
         }
         
         var newAnnotations: [PDFAnnotation] = []
         for lineSelection in selection.selectionsByLine() {
-            let bounds = lineSelection.bounds(for: page)
-            guard bounds.width > 0 && bounds.height > 0 else { continue }
-            
-            let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
-            annotation.color = color
-            annotation.userName = groupID
-            page.addAnnotation(annotation)
-            newAnnotations.append(annotation)
+            for page in lineSelection.pages {
+                let bounds = lineSelection.bounds(for: page)
+                guard bounds.width > 0 && bounds.height > 0 else { continue }
+                
+                let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+                annotation.color = color
+                annotation.userName = groupID
+                page.addAnnotation(annotation)
+                newAnnotations.append(annotation)
+            }
         }
         
         editingAnnotations = newAnnotations
@@ -245,7 +308,7 @@ class HighlightablePDFView: PDFView {
     
     // MARK: - Hit testing
     
-    private func highlightGroupAtPoint(_ viewPoint: CGPoint) -> (page: PDFPage, annotations: [PDFAnnotation])? {
+    private func highlightGroupAtPoint(_ viewPoint: CGPoint) -> (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)? {
         guard let page = page(for: viewPoint, nearest: false) else { return nil }
         let pagePoint = convert(viewPoint, to: page)
         
@@ -254,24 +317,43 @@ class HighlightablePDFView: PDFView {
             annotation.bounds.contains(pagePoint)
         }) else { return nil }
         
-        let group = findConnectedGroup(containing: hit, on: page)
-        return (page, group)
+        let group = findConnectedGroup(containing: hit)
+        guard !group.isEmpty else { return nil }
+        
+        let pages = group.compactMap { $0.page }
+        guard let startPage = pages.min(by: { document!.index(for: $0) < document!.index(for: $1) }),
+              let endPage = pages.max(by: { document!.index(for: $0) < document!.index(for: $1) }) else { return nil }
+        
+        return (group, startPage, endPage)
     }
     
-    private func findConnectedGroup(containing target: PDFAnnotation, on page: PDFPage) -> [PDFAnnotation] {
-        let targetColor = HighlightColor.from(nsColor: target.color)
+    private func findConnectedGroup(containing target: PDFAnnotation) -> [PDFAnnotation] {
+        guard let document = self.document else { return [target] }
         let targetGroupID = target.userName
         
-        // If the target has a groupID, just find all annotations with the same groupID
+        // If has groupID, find all annotations with same groupID across all pages
         if let groupID = targetGroupID, !groupID.isEmpty {
-            let group = page.annotations.filter { a in
-                (a.type == "Highlight" || a.markupType == .highlight) &&
-                a.userName == groupID
+            var group: [PDFAnnotation] = []
+            for pageIndex in 0..<document.pageCount {
+                guard let page = document.page(at: pageIndex) else { continue }
+                let matching = page.annotations.filter { a in
+                    (a.type == "Highlight" || a.markupType == .highlight) &&
+                    a.userName == groupID
+                }
+                group.append(contentsOf: matching)
             }
-            return group.sorted { $0.bounds.midY > $1.bounds.midY }
+            return group.sorted { a, b in
+                let aIdx = document.index(for: a.page!)
+                let bIdx = document.index(for: b.page!)
+                if aIdx != bIdx { return aIdx < bIdx }
+                return a.bounds.midY > b.bounds.midY
+            }
         }
         
-        // Fallback for imported PDFs without groupID: proximity-based merging
+        // Fallback: proximity on same page
+        guard let page = target.page else { return [target] }
+        let targetColor = HighlightColor.from(nsColor: target.color)
+        
         let candidates = page.annotations.filter { a in
             (a.type == "Highlight" || a.markupType == .highlight) &&
             HighlightColor.from(nsColor: a.color) == targetColor &&
@@ -306,13 +388,24 @@ class HighlightablePDFView: PDFView {
         return gap < lineHeight * 1.5
     }
     
-    private func switchToGroup(_ group: (page: PDFPage, annotations: [PDFAnnotation])) {
-        editingAnnotations = group.annotations
-        editingPage = group.page
+    private func switchToGroup(_ group: (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)) {
+        guard let document = self.document else { return }
         
-        let sorted = group.annotations.sorted { $0.bounds.midY > $1.bounds.midY }
-        startPagePoint = CGPoint(x: sorted.first!.bounds.minX, y: sorted.first!.bounds.midY)
-        endPagePoint = CGPoint(x: sorted.last!.bounds.maxX, y: sorted.last!.bounds.midY)
+        editingAnnotations = group.annotations
+        editingStartPage = group.startPage
+        editingEndPage = group.endPage
+        
+        let startAnnotations = group.annotations.filter { $0.page == group.startPage }
+            .sorted { $0.bounds.midY > $1.bounds.midY }
+        let endAnnotations = group.annotations.filter { $0.page == group.endPage }
+            .sorted { $0.bounds.midY > $1.bounds.midY }
+        
+        if let first = startAnnotations.first {
+            startPagePoint = CGPoint(x: first.bounds.minX, y: first.bounds.midY)
+        }
+        if let last = endAnnotations.last {
+            endPagePoint = CGPoint(x: last.bounds.maxX, y: last.bounds.midY)
+        }
         
         startHandle.isHidden = false
         endHandle.isHidden = false
@@ -324,7 +417,7 @@ class HighlightablePDFView: PDFView {
     }
 }
 
-// MARK: - Handle view (teardrop-style, like iOS text selection)
+// MARK: - Handle view (teardrop-style)
 
 class HandleDotView: NSView {
     let isStart: Bool
@@ -349,7 +442,6 @@ class HandleDotView: NSView {
         let stickWidth: CGFloat = 2.5
         
         if isStart {
-            // Circle at top, stick going down
             let circleRect = CGRect(
                 x: (bounds.width - circleSize) / 2,
                 y: bounds.height - circleSize,
@@ -365,9 +457,7 @@ class HandleDotView: NSView {
             color.setFill()
             NSBezierPath(rect: stickRect).fill()
             NSBezierPath(ovalIn: circleRect).fill()
-            
         } else {
-            // Stick going up, circle at bottom
             let circleRect = CGRect(
                 x: (bounds.width - circleSize) / 2,
                 y: 0,

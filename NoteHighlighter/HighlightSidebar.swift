@@ -177,7 +177,9 @@ struct HighlightRow: View {
                     .fill(highlight.color.swiftUIColor)
                     .frame(width: 8, height: 8)
                 
-                Text("Page \(highlight.pageNumber)")
+                Text(highlight.spansMultiplePages
+                     ? "Pages \(highlight.pageNumber)-\(highlight.endPageIndex + 1)"
+                     : "Page \(highlight.pageNumber)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)

@@ -5,12 +5,15 @@ struct Highlight: Identifiable, Hashable {
     let id = UUID()
     let text: String
     let pageIndex: Int
+    let endPageIndex: Int
     let pageLabel: String
     let color: HighlightColor
     let note: String?
     let bounds: CGRect
     let creationDate: Date?
     let groupID: String?
+    
+    var spansMultiplePages: Bool { pageIndex != endPageIndex }
     
     /// The display-friendly page number (1-indexed)
     var pageNumber: Int {
@@ -55,14 +58,14 @@ enum HighlightColor: String, CaseIterable {
     
     var nsColor: NSColor {
         switch self {
-        case .yellow:  return NSColor.yellow
-        case .green:   return NSColor.green
-        case .blue:    return NSColor.blue
-        case .pink:    return NSColor(red: 1.0, green: 0.4, blue: 0.7, alpha: 1.0)
-        case .purple:  return NSColor.purple
-        case .orange:  return NSColor.orange
-        case .red:     return NSColor.red
-        case .unknown: return NSColor.gray
+        case .yellow:  return NSColor(red: 1.0, green: 0.95, blue: 0.0, alpha: 0.35)
+        case .green:   return NSColor(red: 0.0, green: 0.8, blue: 0.2, alpha: 0.35)
+        case .blue:    return NSColor(red: 0.2, green: 0.4, blue: 1.0, alpha: 0.35)
+        case .pink:    return NSColor(red: 1.0, green: 0.3, blue: 0.6, alpha: 0.35)
+        case .purple:  return NSColor(red: 0.6, green: 0.2, blue: 0.9, alpha: 0.35)
+        case .orange:  return NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 0.35)
+        case .red:     return NSColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 0.35)
+        case .unknown: return NSColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 0.35)
         }
     }
     
@@ -74,16 +77,31 @@ enum HighlightColor: String, CaseIterable {
         let g = color.greenComponent
         let b = color.blueComponent
         
-        // Classify based on RGB dominance
-        if r > 0.8 && g > 0.8 && b < 0.5 { return .yellow }
-        if r < 0.5 && g > 0.6 && b < 0.5 { return .green }
-        if r < 0.5 && g < 0.5 && b > 0.6 { return .blue }
-        if r > 0.8 && g < 0.5 && b > 0.5 { return .pink }
-        if r > 0.4 && g < 0.3 && b > 0.6 { return .purple }
-        if r > 0.8 && g > 0.5 && b < 0.3 { return .orange }
-        if r > 0.7 && g < 0.3 && b < 0.3 { return .red }
-        if r > 0.7 && g > 0.7 && b < 0.4 { return .yellow } // Broader yellow match
+        // Find the closest match by comparing RGB (ignoring alpha)
+        var bestMatch: HighlightColor = .unknown
+        var bestDistance: CGFloat = .greatestFiniteMagnitude
         
-        return .unknown
+        let references: [(HighlightColor, CGFloat, CGFloat, CGFloat)] = [
+            (.yellow,  1.0, 0.95, 0.0),
+            (.green,   0.0, 0.8,  0.2),
+            (.blue,    0.2, 0.4,  1.0),
+            (.pink,    1.0, 0.3,  0.6),
+            (.purple,  0.6, 0.2,  0.9),
+            (.orange,  1.0, 0.6,  0.0),
+            (.red,     1.0, 0.2,  0.2),
+        ]
+        
+        for (name, rr, rg, rb) in references {
+            let dist = (r - rr) * (r - rr) + (g - rg) * (g - rg) + (b - rb) * (b - rb)
+            if dist < bestDistance {
+                bestDistance = dist
+                bestMatch = name
+            }
+        }
+        
+        // Threshold: if too far from any known color, return unknown
+        if bestDistance > 0.5 { return .unknown }
+        
+        return bestMatch
     }
 }
