@@ -37,6 +37,7 @@ class AppState: ObservableObject {
               let selection = pdfView.currentSelection else { return }
         
         let color = currentHighlightColor.nsColor
+        let groupID = UUID().uuidString
         
         // Break selection into individual lines for proper per-line highlight rects
         let lineSelections = selection.selectionsByLine()
@@ -49,6 +50,7 @@ class AppState: ObservableObject {
                 
                 let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
                 annotation.color = color
+                annotation.userName = groupID
                 page.addAnnotation(annotation)
             }
         }
@@ -61,18 +63,22 @@ class AppState: ObservableObject {
         guard let document = pdfDocument,
               let page = document.page(at: highlight.pageIndex) else { return }
         
-        // Remove all highlight annotations contained within the merged bounds
         let annotationsToRemove = page.annotations.filter { annotation in
             guard annotation.type == "Highlight" || annotation.markupType == .highlight else { return false }
+            guard HighlightColor.from(nsColor: annotation.color) == highlight.color else { return false }
+            
+            // If both have groupIDs, match by groupID
+            if let groupID = highlight.groupID, !groupID.isEmpty,
+               let annotationGroup = annotation.userName, !annotationGroup.isEmpty {
+                return groupID == annotationGroup
+            }
+            
+            // Fallback: match by bounds intersection
             return highlight.bounds.contains(annotation.bounds) || annotation.bounds.intersects(highlight.bounds)
         }
         
-        // Only remove if colors match
-        let highlightNSColor = highlight.color.nsColor
         for annotation in annotationsToRemove {
-            if HighlightColor.from(nsColor: annotation.color) == highlight.color {
-                page.removeAnnotation(annotation)
-            }
+            page.removeAnnotation(annotation)
         }
         
         refreshHighlights()

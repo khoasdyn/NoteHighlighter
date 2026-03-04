@@ -83,12 +83,6 @@ struct ContentView: View {
                     .help("Save PDF (⌘S)")
                     .keyboardShortcut("s", modifiers: .command)
                     
-                    Button {
-                        exportHighlights()
-                    } label: {
-                        Label("Export", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Export highlights as Markdown")
                 }
             }
         }
@@ -154,28 +148,5 @@ struct ContentView: View {
         }
         return true
     }
-    
-    // MARK: - Export
-    
-    private func exportHighlights() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "\(appState.fileName) - Highlights.md"
-        panel.title = "Export Highlights"
-        
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            
-            let markdown = HighlightExporter.toMarkdown(
-                highlights: appState.highlights,
-                title: appState.fileName
-            )
-            
-            do {
-                try markdown.write(to: url, atomically: true, encoding: .utf8)
-            } catch {
-                print("Export error: \(error.localizedDescription)")
-            }
-        }
-    }
+
 }

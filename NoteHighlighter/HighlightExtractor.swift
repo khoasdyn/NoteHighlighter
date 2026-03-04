@@ -3,7 +3,7 @@ import PDFKit
 struct HighlightExtractor {
     
     static func extractHighlights(from document: PDFDocument) -> [Highlight] {
-        var rawEntries: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String)] = []
+        var rawEntries: [(pageIndex: Int, pageLabel: String, color: HighlightColor, note: String?, bounds: CGRect, text: String, groupID: String?)] = []
         
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -27,18 +27,20 @@ struct HighlightExtractor {
                     color: color,
                     note: cleanNote,
                     bounds: bounds,
-                    text: text
+                    text: text,
+                    groupID: annotation.userName
                 ))
             }
         }
         
-        // Sort: page first, then top-to-bottom (higher Y = higher on page)
+        // Sort: page first, then top-to-bottom
         rawEntries.sort { a, b in
             if a.pageIndex != b.pageIndex { return a.pageIndex < b.pageIndex }
             return a.bounds.midY > b.bounds.midY
         }
         
-        // Merge consecutive same-page, same-color, vertically adjacent entries
+        // Group entries: if annotations have a groupID, group by that.
+        // Otherwise fall back to proximity + color merging (for imported PDFs).
         var highlights: [Highlight] = []
         var i = 0
         
@@ -54,9 +56,19 @@ struct HighlightExtractor {
                 guard next.pageIndex == current.pageIndex,
                       next.color == current.color else { break }
                 
-                let gap = abs(mergedBounds.minY - next.bounds.maxY)
-                let lineHeight = max(mergedBounds.height, next.bounds.height)
-                guard gap < lineHeight * 1.5 else { break }
+                // If both have groupIDs, only merge if they match
+                if let currentGroup = current.groupID, !currentGroup.isEmpty,
+                   let nextGroup = next.groupID, !nextGroup.isEmpty {
+                    guard currentGroup == nextGroup else { break }
+                } else if current.groupID != nil || next.groupID != nil {
+                    // One has a groupID and the other doesn't — don't merge
+                    break
+                } else {
+                    // Neither has a groupID (imported PDF) — use proximity
+                    let gap = abs(mergedBounds.minY - next.bounds.maxY)
+                    let lineHeight = max(mergedBounds.height, next.bounds.height)
+                    guard gap < lineHeight * 1.5 else { break }
+                }
                 
                 mergedBounds = mergedBounds.union(next.bounds)
                 mergedTexts.append(next.text)
@@ -72,7 +84,6 @@ struct HighlightExtractor {
                 j += 1
             }
             
-            // Join line texts with space, clean up double spaces
             let fullText = mergedTexts.joined(separator: " ")
                 .replacingOccurrences(of: "  ", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -89,7 +100,8 @@ struct HighlightExtractor {
                 color: current.color,
                 note: mergedNote,
                 bounds: mergedBounds,
-                creationDate: nil
+                creationDate: nil,
+                groupID: current.groupID
             )
             
             highlights.append(highlight)

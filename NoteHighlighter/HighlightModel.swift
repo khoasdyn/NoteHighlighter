@@ -10,6 +10,7 @@ struct Highlight: Identifiable, Hashable {
     let note: String?
     let bounds: CGRect
     let creationDate: Date?
+    let groupID: String?
     
     /// The display-friendly page number (1-indexed)
     var pageNumber: Int {

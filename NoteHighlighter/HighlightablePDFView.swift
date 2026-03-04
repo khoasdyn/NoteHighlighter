@@ -222,6 +222,7 @@ class HighlightablePDFView: PDFView {
               let selection = page.selection(from: startPagePoint, to: endPagePoint) else { return }
         
         let color = editingAnnotations.first?.color ?? NSColor.yellow
+        let groupID = editingAnnotations.first?.userName
         
         for annotation in editingAnnotations {
             page.removeAnnotation(annotation)
@@ -234,6 +235,7 @@ class HighlightablePDFView: PDFView {
             
             let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
             annotation.color = color
+            annotation.userName = groupID
             page.addAnnotation(annotation)
             newAnnotations.append(annotation)
         }
@@ -258,10 +260,22 @@ class HighlightablePDFView: PDFView {
     
     private func findConnectedGroup(containing target: PDFAnnotation, on page: PDFPage) -> [PDFAnnotation] {
         let targetColor = HighlightColor.from(nsColor: target.color)
+        let targetGroupID = target.userName
         
+        // If the target has a groupID, just find all annotations with the same groupID
+        if let groupID = targetGroupID, !groupID.isEmpty {
+            let group = page.annotations.filter { a in
+                (a.type == "Highlight" || a.markupType == .highlight) &&
+                a.userName == groupID
+            }
+            return group.sorted { $0.bounds.midY > $1.bounds.midY }
+        }
+        
+        // Fallback for imported PDFs without groupID: proximity-based merging
         let candidates = page.annotations.filter { a in
             (a.type == "Highlight" || a.markupType == .highlight) &&
-            HighlightColor.from(nsColor: a.color) == targetColor
+            HighlightColor.from(nsColor: a.color) == targetColor &&
+            (a.userName == nil || a.userName?.isEmpty == true)
         }
         
         var group: Set<ObjectIdentifier> = [ObjectIdentifier(target)]
