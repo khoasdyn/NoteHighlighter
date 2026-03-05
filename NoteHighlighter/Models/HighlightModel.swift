@@ -138,7 +138,7 @@ struct SearchResultGroup: Identifiable {
     var snippets: [(text: String, range: Range<String.Index>, selectionIndex: Int)] {
         selections.enumerated().compactMap { index, selection in
             guard let text = selection.string, !text.isEmpty else { return nil }
-            let extended = selection.copy() as! PDFSelection
+            guard let extended = selection.copy() as? PDFSelection else { return nil }
             extended.extend(atStart: 60)
             extended.extend(atEnd: 60)
             guard let rawText = extended.string else { return nil }

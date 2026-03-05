@@ -7,7 +7,7 @@ final class BookStorage {
 
     private init() {}
 
-    var booksDirectory: URL {
+    private var booksDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport
             .appendingPathComponent("NoteHighlighter", isDirectory: true)

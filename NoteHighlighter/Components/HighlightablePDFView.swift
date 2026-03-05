@@ -217,16 +217,15 @@ class HighlightablePDFView: PDFView {
             return a.1.bounds.midY > b.1.bounds.midY
         }
 
-        editingStartPage = sorted.first!.0
-        editingEndPage = sorted.last!.0
+        guard let first = sorted.first, let last = sorted.last else { return }
+
+        editingStartPage = first.0
+        editingEndPage = last.0
         editingColor = editingAnnotations.first?.color
         editingGroupID = editingAnnotations.first?.userName
 
-        let firstAnnotation = sorted.first!.1
-        startPagePoint = CGPoint(x: firstAnnotation.bounds.minX, y: firstAnnotation.bounds.midY)
-
-        let lastAnnotation = sorted.last!.1
-        endPagePoint = CGPoint(x: lastAnnotation.bounds.maxX, y: lastAnnotation.bounds.midY)
+        startPagePoint = CGPoint(x: first.1.bounds.minX, y: first.1.bounds.midY)
+        endPagePoint = CGPoint(x: last.1.bounds.maxX, y: last.1.bounds.midY)
 
         startHandle.isHidden = false
         endHandle.isHidden = false
@@ -423,7 +422,8 @@ class HighlightablePDFView: PDFView {
     // MARK: - Hit testing
 
     func highlightGroupAtPoint(_ viewPoint: CGPoint) -> (annotations: [PDFAnnotation], startPage: PDFPage, endPage: PDFPage)? {
-        guard let page = page(for: viewPoint, nearest: false) else { return nil }
+        guard let document,
+              let page = page(for: viewPoint, nearest: false) else { return nil }
         let pagePoint = convert(viewPoint, to: page)
 
         guard let hit = page.annotations.first(where: {
@@ -434,8 +434,8 @@ class HighlightablePDFView: PDFView {
         guard !group.isEmpty else { return nil }
 
         let pages = group.compactMap(\.page)
-        guard let startPage = pages.min(by: { document!.index(for: $0) < document!.index(for: $1) }),
-              let endPage = pages.max(by: { document!.index(for: $0) < document!.index(for: $1) }) else { return nil }
+        guard let startPage = pages.min(by: { document.index(for: $0) < document.index(for: $1) }),
+              let endPage = pages.max(by: { document.index(for: $0) < document.index(for: $1) }) else { return nil }
 
         return (group, startPage, endPage)
     }
@@ -454,8 +454,9 @@ class HighlightablePDFView: PDFView {
                 group.append(contentsOf: matching)
             }
             return group.sorted { a, b in
-                let aIdx = document.index(for: a.page!)
-                let bIdx = document.index(for: b.page!)
+                guard let aPage = a.page, let bPage = b.page else { return false }
+                let aIdx = document.index(for: aPage)
+                let bIdx = document.index(for: bPage)
                 if aIdx != bIdx { return aIdx < bIdx }
                 return a.bounds.midY > b.bounds.midY
             }

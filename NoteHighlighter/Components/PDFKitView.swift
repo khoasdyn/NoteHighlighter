@@ -21,7 +21,7 @@ struct PDFKitView: NSViewRepresentable {
 
         context.coordinator.observe(view)
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.pdfView = view
         }
 

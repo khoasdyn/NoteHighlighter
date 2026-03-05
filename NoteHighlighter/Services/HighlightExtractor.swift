@@ -39,10 +39,10 @@ enum HighlightExtractor {
                 return a.bounds.midY > b.bounds.midY
             }
 
-            guard let first = sorted.first else { continue }
+            guard let first = sorted.first, let last = sorted.last else { continue }
 
-            let startPage = sorted.min(by: { $0.pageIndex < $1.pageIndex })!.pageIndex
-            let endPage = sorted.max(by: { $0.pageIndex < $1.pageIndex })!.pageIndex
+            let startPage = first.pageIndex
+            let endPage = last.pageIndex
 
             var mergedBounds = first.bounds
             var mergedTexts: [String] = []
