@@ -215,7 +215,7 @@ struct HighlightSidebar: View {
     private var headerView: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(appState.fileName.isEmpty ? "PDF Highlights" : appState.fileName)
+                Text("Highlights and Notes")
                     .font(.headline)
                     .lineLimit(1)
 
