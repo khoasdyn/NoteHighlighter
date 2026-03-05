@@ -234,19 +234,45 @@ final class AppState {
         pdfView?.highlightedSelections = nil
 
         searchObserver.startObserving(document: document)
-        document.beginFindString(searchQuery, withOptions: [.literal, .caseInsensitive])
+        document.beginFindString(searchQuery, withOptions: [.literal, .caseInsensitive, .diacriticInsensitive])
     }
 
     /// Called by SearchObserver when a match is found
     func didFindSearchMatch(_ selection: PDFSelection) {
+        // Check word boundaries to skip matches inside other words (e.g. "love" in "gloves")
+        guard isWholeWordMatch(selection) else { return }
+
         searchResults.append(selection)
         pdfView?.highlightedSelections = searchResults
 
-        // Auto-navigate to first result
         if searchResults.count == 1 {
             pdfView?.setCurrentSelection(selection, animate: true)
             pdfView?.go(to: selection)
         }
+    }
+
+    private func isWholeWordMatch(_ selection: PDFSelection) -> Bool {
+        let extended = selection.copy() as! PDFSelection
+        extended.extend(atStart: 1)
+        extended.extend(atEnd: 1)
+        guard let extendedText = extended.string,
+              let matchText = selection.string else { return true }
+
+        guard let range = extendedText.range(of: matchText, options: .caseInsensitive) else { return true }
+
+        let charBefore = range.lowerBound > extendedText.startIndex
+            ? extendedText[extendedText.index(before: range.lowerBound)]
+            : nil
+        let charAfter = range.upperBound < extendedText.endIndex
+            ? extendedText[range.upperBound]
+            : nil
+
+        let isWordChar: (Character?) -> Bool = { c in
+            guard let c else { return false }
+            return c.isLetter || c.isNumber
+        }
+
+        return !isWordChar(charBefore) && !isWordChar(charAfter)
     }
 
     /// Called by SearchObserver when search completes

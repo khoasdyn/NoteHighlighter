@@ -143,13 +143,17 @@ struct HighlightSidebar: View {
             ForEach(appState.searchResultsByPage) { group in
                 Section {
                     ForEach(Array(group.snippets.enumerated()), id: \.offset) { snippetIndex, snippet in
+                        let globalIndex = globalSearchIndex(group: group, selectionIndex: snippetIndex)
+                        let isActive = globalIndex == appState.currentSearchResultIndex
+
                         SearchResultRow(
                             snippet: snippet.text,
-                            matchRange: snippet.range
+                            matchRange: snippet.range,
+                            isActive: isActive
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            navigateToSearchSelection(group: group, selectionIndex: snippetIndex)
+                            appState.navigateToSearchResult(at: globalIndex)
                         }
                     }
                 } header: {
@@ -165,26 +169,22 @@ struct HighlightSidebar: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
+                    .padding(.horizontal, 4)
                 }
             }
         }
         .listStyle(.sidebar)
     }
 
-    private func navigateToSearchSelection(group: SearchResultGroup, selectionIndex: Int) {
-        guard selectionIndex < group.selections.count else { return }
-
-        // Find the global index of this selection
-        var globalIndex = 0
+    private func globalSearchIndex(group: SearchResultGroup, selectionIndex: Int) -> Int {
+        var index = 0
         for pageGroup in appState.searchResultsByPage {
             if pageGroup.pageIndex == group.pageIndex {
-                globalIndex += selectionIndex
-                break
+                return index + selectionIndex
             }
-            globalIndex += pageGroup.selections.count
+            index += pageGroup.selections.count
         }
-
-        appState.navigateToSearchResult(at: globalIndex)
+        return index + selectionIndex
     }
 
     // MARK: - Highlights subviews
@@ -295,21 +295,30 @@ struct HighlightSidebar: View {
 private struct SearchResultRow: View {
     let snippet: String
     let matchRange: Range<String.Index>
+    let isActive: Bool
 
     var body: some View {
         Text(attributedSnippet)
-            .font(.callout)
-            .lineLimit(3)
-            .padding(.vertical, 2)
+            .lineLimit(2)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isActive ? Color.accentColor : Color.clear)
+            )
+            .foregroundStyle(isActive ? .white : .primary)
     }
 
     private var attributedSnippet: AttributedString {
         var result = AttributedString(snippet)
-        result.font = .callout
+        result.font = .system(size: 13)
+        result.foregroundColor = isActive ? .white : .secondary
 
         let nsRange = NSRange(matchRange, in: snippet)
         if let attrRange = Range(nsRange, in: result) {
-            result[attrRange].font = .callout.bold()
+            result[attrRange].font = .system(size: 13, weight: .semibold)
+            result[attrRange].foregroundColor = isActive ? .white : .primary
         }
 
         return result
