@@ -17,6 +17,8 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
+        .navigationTitle(appState.fileName)
+        .navigationSubtitle(appState.pageCount > 0 ? appState.currentPageLabel : "")
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button {

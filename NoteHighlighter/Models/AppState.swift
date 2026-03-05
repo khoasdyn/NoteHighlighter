@@ -13,6 +13,17 @@ final class AppState {
     var fileName: String = ""
     var currentHighlightColor: HighlightColor = .yellow
     var pdfFileURL: URL?
+    var currentPageIndex: Int = 0
+    var pageCount: Int = 0
+
+    var currentPageLabel: String {
+        guard let document = pdfDocument,
+              let page = document.page(at: currentPageIndex) else {
+            return "Page \(currentPageIndex + 1) of \(pageCount)"
+        }
+        let label = page.label ?? "\(currentPageIndex + 1)"
+        return "Page \(label) of \(pageCount)"
+    }
 
     /// Reference to the PDFView so we can navigate to highlights
     @ObservationIgnored weak var pdfView: PDFView?
@@ -33,6 +44,8 @@ final class AppState {
         pdfDocument = document
         pdfFileURL = url
         fileName = book.title
+        pageCount = document.pageCount
+        currentPageIndex = 0
         selectedHighlight = nil
         loadHighlights()
     }
@@ -45,6 +58,8 @@ final class AppState {
         highlights = []
         selectedHighlight = nil
         fileName = ""
+        currentPageIndex = 0
+        pageCount = 0
         pdfView = nil
     }
 
