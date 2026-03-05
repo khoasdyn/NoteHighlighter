@@ -40,10 +40,10 @@ struct ContentView: View {
             }
 
             if appState.isSearchActive && !appState.searchResults.isEmpty {
-                ToolbarItem(placement: .automatic) {
-                    HStack(spacing: 4) {
+                ToolbarItemGroup(placement: .automatic) {
+                    HStack(spacing: 8) {
                         Text("Found on \(appState.searchResultPageCount) page\(appState.searchResultPageCount == 1 ? "" : "s")")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12).weight(.semibold))
                             .foregroundStyle(.secondary)
 
                         Button {
@@ -51,13 +51,16 @@ struct ContentView: View {
                         } label: {
                             Image(systemName: "chevron.left")
                         }
+                        .buttonStyle(.borderless)
 
                         Button {
                             appState.nextSearchResult()
                         } label: {
                             Image(systemName: "chevron.right")
                         }
+                        .buttonStyle(.borderless)
                     }
+                    .padding(.horizontal, 16)
                 }
             }
         }
