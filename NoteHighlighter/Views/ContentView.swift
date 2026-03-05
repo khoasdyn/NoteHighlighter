@@ -16,6 +16,12 @@ struct ContentView: View {
                     .onChange(of: pdfViewRef) { _, newView in
                         appState.pdfView = newView
                     }
+                    .overlay(alignment: .top) {
+                        if appState.isSearchActive && !appState.searchResults.isEmpty {
+                            SearchResultBar()
+                                .environment(appState)
+                        }
+                    }
             }
         }
         .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
@@ -36,31 +42,6 @@ struct ContentView: View {
                     appState.closeBook()
                 } label: {
                     Label("Back to Library", systemImage: "chevron.left")
-                }
-            }
-
-            if appState.isSearchActive && !appState.searchResults.isEmpty {
-                ToolbarItemGroup(placement: .automatic) {
-                    HStack(spacing: 8) {
-                        Text("Found on \(appState.searchResultPageCount) page\(appState.searchResultPageCount == 1 ? "" : "s")")
-                            .font(.system(size: 12).weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        Button {
-                            appState.previousSearchResult()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }
-                        .buttonStyle(.borderless)
-
-                        Button {
-                            appState.nextSearchResult()
-                        } label: {
-                            Image(systemName: "chevron.right")
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding(.horizontal, 16)
                 }
             }
         }
