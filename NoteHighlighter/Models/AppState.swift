@@ -25,8 +25,39 @@ final class AppState {
         return "Page \(label) of \(pageCount)"
     }
 
+    // MARK: - Search state
+
+    var searchQuery: String = ""
+    var searchResults: [PDFSelection] = []
+    var currentSearchResultIndex: Int = 0
+    var isSearchActive: Bool = false
+    var isSearching: Bool = false
+
+    var searchResultPageCount: Int {
+        Set(searchResults.compactMap { $0.pages.first }).count
+    }
+
+    var searchResultsByPage: [SearchResultGroup] {
+        guard let document = pdfDocument else { return [] }
+        var groups: [Int: [PDFSelection]] = [:]
+        for selection in searchResults {
+            guard let page = selection.pages.first else { continue }
+            let index = document.index(for: page)
+            groups[index, default: []].append(selection)
+        }
+        return groups.keys.sorted().map { pageIndex in
+            let selections = groups[pageIndex]!
+            let page = document.page(at: pageIndex)
+            let label = page?.label ?? "\(pageIndex + 1)"
+            return SearchResultGroup(pageIndex: pageIndex, pageLabel: label, selections: selections, query: searchQuery)
+        }
+    }
+
     /// Reference to the PDFView so we can navigate to highlights
     @ObservationIgnored weak var pdfView: PDFView?
+
+    /// Handles async search notifications from PDFDocument
+    @ObservationIgnored private lazy var searchObserver = SearchObserver(appState: self)
 
     /// SwiftData model context for persistence
     @ObservationIgnored var modelContext: ModelContext?
@@ -52,6 +83,7 @@ final class AppState {
 
     func closeBook() {
         saveHighlights()
+        clearSearch()
         currentBook = nil
         pdfDocument = nil
         pdfFileURL = nil
@@ -182,6 +214,81 @@ final class AppState {
         refreshHighlights()
     }
 
+    // MARK: - PDF search
+
+    func performSearch() {
+        // Cancel any in-progress search
+        pdfDocument?.cancelFindString()
+        searchObserver.stopObserving()
+
+        guard let document = pdfDocument,
+              !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            clearSearch()
+            return
+        }
+
+        isSearchActive = true
+        isSearching = true
+        searchResults = []
+        currentSearchResultIndex = 0
+        pdfView?.highlightedSelections = nil
+
+        searchObserver.startObserving(document: document)
+        document.beginFindString(searchQuery, withOptions: [.literal, .caseInsensitive])
+    }
+
+    /// Called by SearchObserver when a match is found
+    func didFindSearchMatch(_ selection: PDFSelection) {
+        searchResults.append(selection)
+        pdfView?.highlightedSelections = searchResults
+
+        // Auto-navigate to first result
+        if searchResults.count == 1 {
+            pdfView?.setCurrentSelection(selection, animate: true)
+            pdfView?.go(to: selection)
+        }
+    }
+
+    /// Called by SearchObserver when search completes
+    func didFinishSearch() {
+        isSearching = false
+        searchObserver.stopObserving()
+    }
+
+    func nextSearchResult() {
+        guard !searchResults.isEmpty else { return }
+        currentSearchResultIndex = (currentSearchResultIndex + 1) % searchResults.count
+        navigateToSearchResult(at: currentSearchResultIndex)
+    }
+
+    func previousSearchResult() {
+        guard !searchResults.isEmpty else { return }
+        currentSearchResultIndex = (currentSearchResultIndex - 1 + searchResults.count) % searchResults.count
+        navigateToSearchResult(at: currentSearchResultIndex)
+    }
+
+    func navigateToSearchResult(at index: Int) {
+        guard index >= 0, index < searchResults.count else { return }
+        currentSearchResultIndex = index
+        let selection = searchResults[index]
+        pdfView?.setCurrentSelection(selection, animate: true)
+        pdfView?.go(to: selection)
+    }
+
+    func clearSearch() {
+        pdfDocument?.cancelFindString()
+        searchObserver.stopObserving()
+        searchQuery = ""
+        searchResults = []
+        currentSearchResultIndex = 0
+        isSearchActive = false
+        isSearching = false
+        pdfView?.highlightedSelections = nil
+        pdfView?.clearSelection()
+    }
+
+    // MARK: - Highlight navigation
+
     func navigateToHighlight(_ highlight: Highlight) {
         selectedHighlight = highlight
 
@@ -194,5 +301,34 @@ final class AppState {
 
         let destination = PDFDestination(page: page, at: CGPoint(x: 0, y: targetY))
         pdfView.go(to: destination)
+    }
+}
+
+// MARK: - Search observer (PDFDocumentDelegate)
+
+private class SearchObserver: NSObject, PDFDocumentDelegate {
+    weak var appState: AppState?
+    private weak var currentDocument: PDFDocument?
+
+    init(appState: AppState) {
+        self.appState = appState
+    }
+
+    func startObserving(document: PDFDocument) {
+        currentDocument = document
+        document.delegate = self
+    }
+
+    func stopObserving() {
+        currentDocument?.delegate = nil
+        currentDocument = nil
+    }
+
+    func didMatchString(_ instance: PDFSelection) {
+        appState?.didFindSearchMatch(instance)
+    }
+
+    func documentDidEndDocumentFind(_ notification: Notification) {
+        appState?.didFinishSearch()
     }
 }

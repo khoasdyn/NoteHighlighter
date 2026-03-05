@@ -123,6 +123,36 @@ enum HighlightColor: String, CaseIterable {
     }
 }
 
+// MARK: - Search result grouping
+
+struct SearchResultGroup: Identifiable {
+    let id = UUID()
+    let pageIndex: Int
+    let pageLabel: String
+    let selections: [PDFSelection]
+    let query: String
+
+    var matchCount: Int { selections.count }
+
+    /// Snippet text with surrounding context for each match
+    var snippets: [(text: String, range: Range<String.Index>)] {
+        selections.compactMap { selection in
+            guard let text = selection.string, !text.isEmpty else { return nil }
+            // Extend selection for context
+            let extended = selection.copy() as! PDFSelection
+            extended.extend(atStart: 30)
+            extended.extend(atEnd: 30)
+            guard let fullText = extended.string else { return nil }
+
+            // Find the match within the extended text
+            if let matchRange = fullText.range(of: text, options: .caseInsensitive) {
+                return (fullText, matchRange)
+            }
+            return (fullText, fullText.startIndex..<fullText.endIndex)
+        }
+    }
+}
+
 // MARK: - PDFAnnotation helpers
 
 extension PDFAnnotation {
