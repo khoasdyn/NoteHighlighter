@@ -35,10 +35,33 @@ struct HighlightSidebar: View {
             if appState.isSearchActive {
                 searchResultsView
             } else {
-                highlightsView(selectedHighlight: $appState.selectedHighlight)
+                switch appState.sidebarMode {
+                case .highlights:
+                    highlightsView(selectedHighlight: $appState.selectedHighlight)
+                case .tableOfContents:
+                    TOCSidebarView()
+                }
             }
         }
         .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
+        .toolbar(removing: .sidebarToggle)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    ForEach(SidebarMode.allCases, id: \.self) { mode in
+                        Button {
+                            appState.sidebarMode = mode
+                        } label: {
+                            Label(mode.label, systemImage: mode.icon)
+                        }
+                    }
+                } label: {
+                    Label("Sidebar", systemImage: "sidebar.left")
+                } primaryAction: {
+                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+                }
+            }
+        }
     }
 
     // MARK: - Highlights mode

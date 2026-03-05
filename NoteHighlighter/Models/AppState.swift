@@ -2,6 +2,25 @@ import SwiftUI
 import PDFKit
 import SwiftData
 
+enum SidebarMode: String, CaseIterable {
+    case highlights
+    case tableOfContents
+
+    var label: String {
+        switch self {
+        case .highlights: return "Highlights and Notes"
+        case .tableOfContents: return "Table of Contents"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .highlights: return "highlighter"
+        case .tableOfContents: return "list.bullet.indent"
+        }
+    }
+}
+
 @Observable
 final class AppState {
 
@@ -23,6 +42,7 @@ final class AppState {
     // MARK: - UI state
 
     var showFileImporter = false
+    var sidebarMode: SidebarMode = .highlights
 
     // MARK: - Search state
 
@@ -105,5 +125,22 @@ final class AppState {
         currentPageIndex = 0
         pageCount = 0
         pdfView = nil
+        sidebarMode = .highlights
+    }
+
+    // MARK: - Table of Contents
+
+    var hasTableOfContents: Bool {
+        guard let root = pdfDocument?.outlineRoot else { return false }
+        return root.numberOfChildren > 0
+    }
+
+    func navigateToOutline(_ outline: PDFOutline) {
+        guard let destination = outline.destination,
+              let page = destination.page else { return }
+        pdfView?.go(to: destination)
+        if let document = pdfDocument {
+            currentPageIndex = document.index(for: page)
+        }
     }
 }
