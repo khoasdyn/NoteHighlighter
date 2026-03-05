@@ -134,9 +134,9 @@ struct SearchResultGroup: Identifiable {
 
     var matchCount: Int { selections.count }
 
-    /// Snippet text with surrounding context for each match
-    var snippets: [(text: String, range: Range<String.Index>)] {
-        selections.compactMap { selection in
+    /// Snippet text with surrounding context for each match, including the original selection index
+    var snippets: [(text: String, range: Range<String.Index>, selectionIndex: Int)] {
+        selections.enumerated().compactMap { index, selection in
             guard let text = selection.string, !text.isEmpty else { return nil }
             let extended = selection.copy() as! PDFSelection
             extended.extend(atStart: 60)
@@ -146,12 +146,26 @@ struct SearchResultGroup: Identifiable {
             let cleaned = Self.collapseWhitespace(rawText)
             guard !cleaned.isEmpty else { return nil }
 
-            guard let matchRange = cleaned.range(of: query, options: .caseInsensitive) else { return nil }
+            // Find the occurrence closest to center (the actual match, not a neighbor)
+            let center = cleaned.count / 2
+            var bestRange: Range<String.Index>?
+            var bestDistance = Int.max
+            var searchStart = cleaned.startIndex
+            while let range = cleaned.range(of: query, options: .caseInsensitive, range: searchStart..<cleaned.endIndex) {
+                let matchCenter = cleaned.distance(from: cleaned.startIndex, to: range.lowerBound) + query.count / 2
+                let distance = abs(matchCenter - center)
+                if distance < bestDistance {
+                    bestDistance = distance
+                    bestRange = range
+                }
+                searchStart = range.upperBound
+            }
+            guard let matchRange = bestRange else { return nil }
 
             let snippet = Self.extractCleanSnippet(from: cleaned, matchRange: matchRange, wordsBefore: 5, wordsAfter: 6)
             guard let snippetMatchRange = snippet.range(of: query, options: .caseInsensitive) else { return nil }
 
-            return (snippet, snippetMatchRange)
+            return (snippet, snippetMatchRange, index)
         }
     }
 

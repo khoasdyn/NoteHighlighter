@@ -142,8 +142,8 @@ struct HighlightSidebar: View {
         List {
             ForEach(appState.searchResultsByPage) { group in
                 Section {
-                    ForEach(Array(group.snippets.enumerated()), id: \.offset) { snippetIndex, snippet in
-                        let globalIndex = globalSearchIndex(group: group, selectionIndex: snippetIndex)
+                    ForEach(Array(group.snippets.enumerated()), id: \.offset) { _, snippet in
+                        let globalIndex = globalSearchIndex(group: group, selectionIndex: snippet.selectionIndex)
                         let isActive = globalIndex == appState.currentSearchResultIndex
 
                         SearchResultRow(

@@ -246,8 +246,7 @@ final class AppState {
         pdfView?.highlightedSelections = searchResults
 
         if searchResults.count == 1 {
-            pdfView?.setCurrentSelection(selection, animate: true)
-            pdfView?.go(to: selection)
+            navigateToSearchResult(at: 0)
         }
     }
 
@@ -294,11 +293,22 @@ final class AppState {
     }
 
     func navigateToSearchResult(at index: Int) {
-        guard index >= 0, index < searchResults.count else { return }
+        guard index >= 0, index < searchResults.count,
+              let pdfView else { return }
         currentSearchResultIndex = index
         let selection = searchResults[index]
-        pdfView?.setCurrentSelection(selection, animate: true)
-        pdfView?.go(to: selection)
+        pdfView.setCurrentSelection(selection, animate: true)
+
+        guard let page = selection.pages.first else {
+            pdfView.go(to: selection)
+            return
+        }
+
+        let bounds = selection.bounds(for: page)
+        let visibleHeight = pdfView.visibleRect.height / pdfView.scaleFactor
+        let targetY = bounds.midY + visibleHeight / 2
+        let destination = PDFDestination(page: page, at: CGPoint(x: 0, y: targetY))
+        pdfView.go(to: destination)
     }
 
     func clearSearch() {
