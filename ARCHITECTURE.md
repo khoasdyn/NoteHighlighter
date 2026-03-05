@@ -4,18 +4,24 @@
 
 ```
 NoteHighlighter/
-├── NoteHighlighterApp.swift      App entry point
-├── AppState.swift                Shared state (@Observable)
-├── ContentView.swift             Main split-view layout
-├── DataModels.swift              SwiftData models (BookItem, SavedHighlight)
-├── HighlightModel.swift          Value types (Highlight, HighlightColor) + PDFAnnotation extension
-├── HighlightExtractor.swift      Reads annotations from PDFDocument
-├── HighlightSidebar.swift        Left panel: search, filters, highlight list
-├── PDFKitView.swift              SwiftUI ↔ AppKit bridge
-├── HighlightablePDFView.swift    Custom PDFView subclass (handles, editing)
-├── SelectionToolbar.swift        Floating toolbar (colors, copy, delete)
-├── BookStorage.swift             PDF file management (copy, delete, thumbnails)
-└── Assets.xcassets/              App icons and colors
+├── App/
+│   └── NoteHighlighterApp.swift      App entry point
+├── Models/
+│   ├── AppState.swift                Shared state (@Observable)
+│   ├── DataModels.swift              SwiftData models (BookItem, SavedHighlight)
+│   └── HighlightModel.swift          Value types (Highlight, HighlightColor) + PDFAnnotation extension
+├── Views/
+│   ├── ContentView.swift             Main split-view layout
+│   ├── GalleryView.swift             Library grid with book cards
+│   └── HighlightSidebar.swift        Left panel: search, filters, highlight list
+├── Services/
+│   ├── BookStorage.swift             PDF file management (copy, delete, thumbnails)
+│   └── HighlightExtractor.swift      Reads annotations from PDFDocument
+├── Components/
+│   ├── HighlightablePDFView.swift    Custom PDFView subclass (handles, editing)
+│   ├── PDFKitView.swift              SwiftUI ↔ AppKit bridge
+│   └── SelectionToolbar.swift        Floating toolbar (colors, copy, delete)
+└── Assets.xcassets/                  App icons and colors
 ```
 
 ## Layer diagram
