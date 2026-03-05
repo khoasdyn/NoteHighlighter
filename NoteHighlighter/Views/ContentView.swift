@@ -21,6 +21,15 @@ struct ContentView: View {
         .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
         .navigationTitle(appState.fileName)
         .navigationSubtitle(appState.pageCount > 0 ? appState.currentPageLabel : "")
+        .searchable(text: $appState.searchQuery, placement: .toolbar, prompt: "Search")
+        .onSubmit(of: .search) {
+            appState.performSearch()
+        }
+        .onChange(of: appState.searchQuery) { _, newValue in
+            if newValue.isEmpty && appState.isSearchActive {
+                appState.clearSearch()
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button {
@@ -30,60 +39,23 @@ struct ContentView: View {
                 }
             }
 
-            ToolbarItem(placement: .automatic) {
-                HStack(spacing: 6) {
+            if appState.isSearchActive && !appState.searchResults.isEmpty {
+                ToolbarItem(placement: .automatic) {
                     HStack(spacing: 4) {
-                        Image(systemName: "magnifyingglass")
+                        Text("Found on \(appState.searchResultPageCount) page\(appState.searchResultPageCount == 1 ? "" : "s")")
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                            .font(.system(size: 12))
-
-                        TextField("Search", text: $appState.searchQuery)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 13))
-                            .onSubmit {
-                                appState.performSearch()
-                            }
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-                    )
-                    .frame(width: 160)
-
-                    if appState.isSearchActive {
-                        if appState.isSearching {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else if appState.searchResults.isEmpty {
-                            Text("Not found")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Found on \(appState.searchResultPageCount) page\(appState.searchResultPageCount == 1 ? "" : "s")")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
 
                         Button {
                             appState.previousSearchResult()
                         } label: {
                             Image(systemName: "chevron.left")
                         }
-                        .disabled(appState.searchResults.isEmpty)
 
                         Button {
                             appState.nextSearchResult()
                         } label: {
                             Image(systemName: "chevron.right")
-                        }
-                        .disabled(appState.searchResults.isEmpty)
-
-                        Button("Done") {
-                            appState.clearSearch()
                         }
                     }
                 }

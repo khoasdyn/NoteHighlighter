@@ -138,18 +138,53 @@ struct SearchResultGroup: Identifiable {
     var snippets: [(text: String, range: Range<String.Index>)] {
         selections.compactMap { selection in
             guard let text = selection.string, !text.isEmpty else { return nil }
-            // Extend selection for context
             let extended = selection.copy() as! PDFSelection
-            extended.extend(atStart: 30)
-            extended.extend(atEnd: 30)
-            guard let fullText = extended.string else { return nil }
+            extended.extend(atStart: 60)
+            extended.extend(atEnd: 60)
+            guard let rawText = extended.string else { return nil }
 
-            // Find the match within the extended text
-            if let matchRange = fullText.range(of: text, options: .caseInsensitive) {
-                return (fullText, matchRange)
-            }
-            return (fullText, fullText.startIndex..<fullText.endIndex)
+            let cleaned = Self.collapseWhitespace(rawText)
+            guard !cleaned.isEmpty else { return nil }
+
+            guard let matchRange = cleaned.range(of: query, options: .caseInsensitive) else { return nil }
+
+            let snippet = Self.extractCleanSnippet(from: cleaned, matchRange: matchRange, wordsBefore: 5, wordsAfter: 6)
+            guard let snippetMatchRange = snippet.range(of: query, options: .caseInsensitive) else { return nil }
+
+            return (snippet, snippetMatchRange)
         }
+    }
+
+    /// Collapses newlines and multiple spaces into single spaces
+    private static func collapseWhitespace(_ text: String) -> String {
+        let components = text.components(separatedBy: .whitespacesAndNewlines)
+        return components.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// Extracts a word-boundary-trimmed snippet around the match
+    private static func extractCleanSnippet(from text: String, matchRange: Range<String.Index>, wordsBefore: Int, wordsAfter: Int) -> String {
+        let beforeText = String(text[text.startIndex..<matchRange.lowerBound])
+        let matchText = String(text[matchRange])
+        let afterText = String(text[matchRange.upperBound..<text.endIndex])
+
+        // Take N words before the match
+        let wordsBefore = beforeText
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .suffix(wordsBefore)
+            .joined(separator: " ")
+
+        // Take N words after the match
+        let wordsAfter = afterText
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .prefix(wordsAfter)
+            .joined(separator: " ")
+
+        var result = ""
+        if !wordsBefore.isEmpty { result += wordsBefore + " " }
+        result += matchText
+        if !wordsAfter.isEmpty { result += " " + wordsAfter }
+
+        return result
     }
 }
 
