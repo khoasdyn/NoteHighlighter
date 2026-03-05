@@ -207,6 +207,6 @@ struct SearchResultGroup: Identifiable {
 extension PDFAnnotation {
     /// Whether this annotation is a highlight (covers both string-typed and markup-typed checks)
     var isHighlightAnnotation: Bool {
-        type == "Highlight" || markupType == .highlight
+        type == "Highlight"
     }
 }
