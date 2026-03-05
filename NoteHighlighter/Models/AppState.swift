@@ -43,6 +43,7 @@ final class AppState {
 
     var showFileImporter = false
     var sidebarMode: SidebarMode = .highlights
+    var selectedOutline: PDFOutline?
 
     // MARK: - Search state
 
@@ -136,9 +137,19 @@ final class AppState {
     }
 
     func navigateToOutline(_ outline: PDFOutline) {
-        guard let destination = outline.destination,
+        selectedOutline = outline
+
+        guard let pdfView,
+              let destination = outline.destination,
               let page = destination.page else { return }
-        pdfView?.go(to: destination)
+
+        let pointY = destination.point.y
+        let visibleHeight = pdfView.visibleRect.height / pdfView.scaleFactor
+        let targetY = pointY + visibleHeight / 2
+
+        let centeredDestination = PDFDestination(page: page, at: CGPoint(x: 0, y: targetY))
+        pdfView.go(to: centeredDestination)
+
         if let document = pdfDocument {
             currentPageIndex = document.index(for: page)
         }

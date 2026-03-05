@@ -103,6 +103,10 @@ private struct OutlineItemView: View {
         outline.numberOfChildren > 0
     }
 
+    private var isSelected: Bool {
+        appState.selectedOutline === outline
+    }
+
     private var pageLabel: String? {
         guard let destination = outline.destination,
               let page = destination.page,
@@ -120,7 +124,7 @@ private struct OutlineItemView: View {
                     if hasChildren {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(isSelected ? Color.white.opacity(0.7) : Color.secondary.opacity(0.5))
                             .frame(width: 12)
                             .onTapGesture {
                                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -134,7 +138,7 @@ private struct OutlineItemView: View {
 
                     Text(outline.label ?? "Untitled")
                         .font(depth == 0 ? .callout.weight(.medium) : .callout)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(isSelected ? .white : .primary)
                         .lineLimit(2)
 
                     Spacer()
@@ -142,11 +146,16 @@ private struct OutlineItemView: View {
                     if let pageLabel {
                         Text(pageLabel)
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(isSelected ? Color.white.opacity(0.7) : Color.secondary.opacity(0.5))
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
                 .padding(.leading, CGFloat(depth) * 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isSelected ? Color.accentColor : Color.clear)
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
