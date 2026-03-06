@@ -2,6 +2,25 @@ import SwiftUI
 import PDFKit
 import SwiftData
 
+enum SelectionMode: String, CaseIterable {
+    case character
+    case word
+
+    var label: String {
+        switch self {
+        case .character: return "Character"
+        case .word: return "Word"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .character: return "character.cursor.ibeam"
+        case .word: return "text.word.spacing"
+        }
+    }
+}
+
 enum SidebarMode: String, CaseIterable {
     case highlights
     case tableOfContents
@@ -45,6 +64,10 @@ final class AppState {
     var sidebarMode: SidebarMode = .highlights
     var selectedOutline: PDFOutline?
 
+    var selectionMode: SelectionMode {
+        didSet { UserDefaults.standard.set(selectionMode.rawValue, forKey: "selectionMode") }
+    }
+
     // MARK: - Search state
 
     var searchQuery: String = ""
@@ -52,6 +75,13 @@ final class AppState {
     var currentSearchResultIndex: Int = 0
     var isSearchActive: Bool = false
     var isSearching: Bool = false
+
+    // MARK: - Init
+
+    init() {
+        let stored = UserDefaults.standard.string(forKey: "selectionMode") ?? SelectionMode.word.rawValue
+        self.selectionMode = SelectionMode(rawValue: stored) ?? .word
+    }
 
     // MARK: - Dependencies
 

@@ -45,6 +45,17 @@ struct ContentView: View {
                     Label("Back to Library", systemImage: "chevron.left")
                 }
             }
+
+            ToolbarItem(placement: .automatic) {
+                Picker("Selection Mode", selection: $appState.selectionMode) {
+                    ForEach(SelectionMode.allCases, id: \.self) { mode in
+                        Label(mode.label, systemImage: mode.icon)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .help(appState.selectionMode == .word ? "Word selection mode" : "Character selection mode")
+            }
         }
     }
 }

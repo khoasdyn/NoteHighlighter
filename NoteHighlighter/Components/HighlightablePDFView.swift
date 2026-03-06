@@ -46,6 +46,12 @@ class HighlightablePDFView: PDFView {
         case none, start, end
     }
 
+    // Word-mode selection state
+    private var wordSelectionActive = false
+    private var wordSelectionDidDrag = false
+    private var wordSelectionStartPage: PDFPage?
+    private var wordSelectionStartPoint: CGPoint = .zero
+
     // MARK: - Setup
 
     override init(frame: CGRect) {
@@ -318,10 +324,73 @@ class HighlightablePDFView: PDFView {
             }
         }
 
+        // Word-mode: record start point but don't select yet (only drag triggers selection)
+        if appState?.selectionMode == .word,
+           let clickPage = page(for: viewPoint, nearest: true) {
+            let pagePoint = convert(viewPoint, to: clickPage)
+            wordSelectionActive = true
+            wordSelectionDidDrag = false
+            wordSelectionStartPage = clickPage
+            wordSelectionStartPoint = pagePoint
+            currentSelection = nil
+            return
+        }
+
         super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
+        // Word-mode drag: build selection from start word to current word
+        if wordSelectionActive {
+            wordSelectionDidDrag = true
+            let viewPoint = convert(event.locationInWindow, from: nil)
+            guard let document,
+                  let startPage = wordSelectionStartPage,
+                  let dragPage = page(for: viewPoint, nearest: true) else { return }
+
+            let dragPagePoint = convert(viewPoint, to: dragPage)
+
+            // Get word boundaries at both endpoints
+            let startWord = startPage.selectionForWord(at: wordSelectionStartPoint)
+            let endWord = dragPage.selectionForWord(at: dragPagePoint)
+
+            guard let startWord, let endWord else { return }
+
+            // Determine direction to build selection from leading edge of first word
+            // to trailing edge of last word
+            let startIdx = document.index(for: startPage)
+            let endIdx = document.index(for: dragPage)
+            let isForward: Bool
+            if startIdx != endIdx {
+                isForward = startIdx < endIdx
+            } else {
+                isForward = dragPagePoint.y < wordSelectionStartPoint.y ||
+                    (abs(dragPagePoint.y - wordSelectionStartPoint.y) < 5 && dragPagePoint.x >= wordSelectionStartPoint.x)
+            }
+
+            let fromPage: PDFPage, fromPoint: CGPoint, toPage: PDFPage, toPoint: CGPoint
+            if isForward {
+                let startBounds = startWord.bounds(for: startPage)
+                let endBounds = endWord.bounds(for: dragPage)
+                fromPage = startPage
+                fromPoint = CGPoint(x: startBounds.minX, y: startBounds.midY)
+                toPage = dragPage
+                toPoint = CGPoint(x: endBounds.maxX, y: endBounds.midY)
+            } else {
+                let startBounds = startWord.bounds(for: startPage)
+                let endBounds = endWord.bounds(for: dragPage)
+                fromPage = dragPage
+                fromPoint = CGPoint(x: endBounds.minX, y: endBounds.midY)
+                toPage = startPage
+                toPoint = CGPoint(x: startBounds.maxX, y: startBounds.midY)
+            }
+
+            if let selection = document.selection(from: fromPage, at: fromPoint, to: toPage, at: toPoint) {
+                currentSelection = selection
+            }
+            return
+        }
+
         guard dragging != .none else {
             super.mouseDragged(with: event)
             return
@@ -332,12 +401,26 @@ class HighlightablePDFView: PDFView {
         switch dragging {
         case .start:
             if let page = page(for: viewPoint, nearest: true) {
-                startPagePoint = convert(viewPoint, to: page)
+                var pagePoint = convert(viewPoint, to: page)
+                // Snap to word boundary in Word mode
+                if appState?.selectionMode == .word,
+                   let wordSel = page.selectionForWord(at: pagePoint) {
+                    let wordBounds = wordSel.bounds(for: page)
+                    pagePoint = CGPoint(x: wordBounds.minX, y: wordBounds.midY)
+                }
+                startPagePoint = pagePoint
                 editingStartPage = page
             }
         case .end:
             if let page = page(for: viewPoint, nearest: true) {
-                endPagePoint = convert(viewPoint, to: page)
+                var pagePoint = convert(viewPoint, to: page)
+                // Snap to word boundary in Word mode
+                if appState?.selectionMode == .word,
+                   let wordSel = page.selectionForWord(at: pagePoint) {
+                    let wordBounds = wordSel.bounds(for: page)
+                    pagePoint = CGPoint(x: wordBounds.maxX, y: wordBounds.midY)
+                }
+                endPagePoint = pagePoint
                 editingEndPage = page
             }
         case .none: break
@@ -348,6 +431,28 @@ class HighlightablePDFView: PDFView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        // Word-mode: only show toolbar if an actual drag occurred
+        if wordSelectionActive {
+            let didDrag = wordSelectionDidDrag
+            wordSelectionActive = false
+            wordSelectionDidDrag = false
+            wordSelectionStartPage = nil
+
+            if didDrag {
+                let viewPoint = convert(event.locationInWindow, from: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    guard let self,
+                          let selection = self.currentSelection,
+                          let text = selection.string,
+                          !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    self.showSelectionToolbar(at: viewPoint)
+                }
+            } else {
+                currentSelection = nil
+            }
+            return
+        }
+
         if dragging != .none {
             dragging = .none
 
