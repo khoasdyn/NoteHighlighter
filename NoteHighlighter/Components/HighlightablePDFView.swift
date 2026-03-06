@@ -86,6 +86,7 @@ class HighlightablePDFView: PDFView {
             self, selector: #selector(viewportChanged),
             name: NSView.boundsDidChangeNotification, object: scrollView.contentView
         )
+
     }
 
     private func findInternalScrollView() -> NSScrollView? {
