@@ -350,14 +350,10 @@ class HighlightablePDFView: PDFView {
 
             let dragPagePoint = convert(viewPoint, to: dragPage)
 
-            // Get word boundaries at both endpoints
+            // Get word boundaries; fall back to raw points in whitespace
             let startWord = startPage.selectionForWord(at: wordSelectionStartPoint)
             let endWord = dragPage.selectionForWord(at: dragPagePoint)
 
-            guard let startWord, let endWord else { return }
-
-            // Determine direction to build selection from leading edge of first word
-            // to trailing edge of last word
             let startIdx = document.index(for: startPage)
             let endIdx = document.index(for: dragPage)
             let isForward: Bool
@@ -370,19 +366,43 @@ class HighlightablePDFView: PDFView {
 
             let fromPage: PDFPage, fromPoint: CGPoint, toPage: PDFPage, toPoint: CGPoint
             if isForward {
-                let startBounds = startWord.bounds(for: startPage)
-                let endBounds = endWord.bounds(for: dragPage)
+                let startPt: CGPoint
+                if let startWord {
+                    let b = startWord.bounds(for: startPage)
+                    startPt = CGPoint(x: b.minX, y: b.midY)
+                } else {
+                    startPt = wordSelectionStartPoint
+                }
+                let endPt: CGPoint
+                if let endWord {
+                    let b = endWord.bounds(for: dragPage)
+                    endPt = CGPoint(x: b.maxX, y: b.midY)
+                } else {
+                    endPt = dragPagePoint
+                }
                 fromPage = startPage
-                fromPoint = CGPoint(x: startBounds.minX, y: startBounds.midY)
+                fromPoint = startPt
                 toPage = dragPage
-                toPoint = CGPoint(x: endBounds.maxX, y: endBounds.midY)
+                toPoint = endPt
             } else {
-                let startBounds = startWord.bounds(for: startPage)
-                let endBounds = endWord.bounds(for: dragPage)
+                let startPt: CGPoint
+                if let startWord {
+                    let b = startWord.bounds(for: startPage)
+                    startPt = CGPoint(x: b.maxX, y: b.midY)
+                } else {
+                    startPt = wordSelectionStartPoint
+                }
+                let endPt: CGPoint
+                if let endWord {
+                    let b = endWord.bounds(for: dragPage)
+                    endPt = CGPoint(x: b.minX, y: b.midY)
+                } else {
+                    endPt = dragPagePoint
+                }
                 fromPage = dragPage
-                fromPoint = CGPoint(x: endBounds.minX, y: endBounds.midY)
+                fromPoint = endPt
                 toPage = startPage
-                toPoint = CGPoint(x: startBounds.maxX, y: startBounds.midY)
+                toPoint = startPt
             }
 
             if let selection = document.selection(from: fromPage, at: fromPoint, to: toPage, at: toPoint) {
@@ -402,7 +422,7 @@ class HighlightablePDFView: PDFView {
         case .start:
             if let page = page(for: viewPoint, nearest: true) {
                 var pagePoint = convert(viewPoint, to: page)
-                // Snap to word boundary in Word mode
+                // In Word mode, snap to word boundary when possible
                 if appState?.selectionMode == .word,
                    let wordSel = page.selectionForWord(at: pagePoint) {
                     let wordBounds = wordSel.bounds(for: page)
@@ -414,7 +434,7 @@ class HighlightablePDFView: PDFView {
         case .end:
             if let page = page(for: viewPoint, nearest: true) {
                 var pagePoint = convert(viewPoint, to: page)
-                // Snap to word boundary in Word mode
+                // In Word mode, snap to word boundary when possible
                 if appState?.selectionMode == .word,
                    let wordSel = page.selectionForWord(at: pagePoint) {
                     let wordBounds = wordSel.bounds(for: page)
