@@ -22,10 +22,17 @@ NoteHighlighter/
 │   ├── BookStorage.swift              PDF file management (copy, delete, thumbnails)
 │   └── HighlightExtractor.swift       Reads annotations from PDFDocument → [Highlight]
 ├── Components/
-│   ├── HighlightablePDFView.swift     Custom PDFView subclass (handles, editing, toolbar)
-│   ├── PDFKitView.swift               SwiftUI ↔ AppKit bridge (NSViewRepresentable)
-│   └── SelectionToolbar.swift         Floating AppKit toolbar (colors, copy, delete)
-└── Assets.xcassets/                   App icons and colors
+│   ├── HandleDotView.swift                         Teardrop drag handle NSView
+│   ├── HighlightablePDFView.swift                  Core PDFView subclass: properties, setup, constants
+│   ├── HighlightablePDFView+Editing.swift          Editing lifecycle, handle repositioning, annotation rebuild
+│   ├── HighlightablePDFView+HitTesting.swift       Highlight hit testing, group discovery, group switching
+│   ├── HighlightablePDFView+MouseEvents.swift      mouseDown/mouseDragged/mouseUp overrides
+│   ├── HighlightablePDFView+Toolbar.swift          Selection toolbar show/hide/positioning
+│   ├── PDFKitView.swift                            SwiftUI ↔ AppKit bridge (NSViewRepresentable)
+│   └── SelectionToolbar.swift                      Floating AppKit toolbar (colors, copy, delete)
+├── Extensions/
+│   └── String+Helpers.swift                        Optional<String>.isNilOrEmpty helper
+└── Assets.xcassets/                                App icons and colors
 ```
 
 ## Layer diagram
@@ -157,17 +164,27 @@ Minimal floating bar overlaid at the top-right of the PDF view during active sea
 
 `NSViewRepresentable` bridge. Creates a `HighlightablePDFView` configured for single-page continuous vertical scrolling with auto-scaling. Exposes a `pdfView` binding so `AppState` can call navigation methods. The `Coordinator` observes `PDFViewPageChanged` notifications to keep `appState.currentPageIndex` in sync.
 
-### HighlightablePDFView.swift
+### HighlightablePDFView (split across 5 files)
 
-`PDFView` subclass and the most complex file. Three responsibilities:
+`PDFView` subclass handling text highlighting, drag-handle editing, and floating toolbar management. Originally a single ~580-line file, now split by responsibility into a core file plus four extensions.
 
-**1. Editing with drag handles.** When a highlight is tapped or selected from the sidebar, two `HandleDotView` instances appear (teardrop-style: circle + stick spanning the line height). Dragging a handle calls `rebuildAnnotations()`, which deletes old annotations, computes a new selection via `PDFDocument.selection(from:at:to:at:)`, and creates new per-line annotations preserving the original `editingColor` and `editingGroupID`. This prevents color/group data loss during the remove-and-recreate cycle.
+**HighlightablePDFView.swift** (core): class declaration, all stored properties, the `Layout` and `DragTarget` enums, setup/init methods, scroll observer registration, and the `distance(_:_:)` utility. Properties that were previously `private` are now `internal` because Swift extensions in separate files cannot access `private`/`fileprivate` members. This is the only access control change in the split.
 
-**2. Floating toolbar.** Shows `SelectionToolbar` after text selection (for creating highlights) or when clicking an existing highlight (for color change / deletion). Positioned near the selection endpoint with edge clamping.
+**HighlightablePDFView+Editing.swift**: editing lifecycle methods. `startEditing(highlight:)` collects matching annotations by groupID and color, determines start/end pages, and shows handles. `stopEditing()` clears all editing state. `repositionHandles()` converts annotation bounds to view coordinates and positions the two `HandleDotView` instances. `rebuildAnnotations()` deletes old annotations, computes a new selection via `PDFDocument.selection(from:at:to:at:)`, and creates new per-line annotations preserving `editingColor` and `editingGroupID` to prevent data loss during the remove-and-recreate cycle. `changeEditingHighlightColor(_:)` and `deleteHighlightUnderSelection()` handle toolbar actions.
 
-**3. Hit testing and group detection.** `highlightGroupAtPoint(_:)` finds which highlight group was clicked. `findConnectedGroup(containing:)` uses groupID lookup when available, and falls back to vertical adjacency proximity for legacy annotations without groupIDs.
+**HighlightablePDFView+MouseEvents.swift**: overrides for `mouseDown`, `mouseDragged`, and `mouseUp`. Handles four event paths: toolbar pass-through, handle drag start/end detection, highlight group tapping, and word-mode selection. Word mode records a start point on `mouseDown`, builds a word-boundary-snapped selection on `mouseDragged` (with fallback to raw points in whitespace), and shows the toolbar on `mouseUp` only if an actual drag occurred.
 
-Also contains `HandleDotView`: custom `NSView` that draws a blue circle + vertical stick. Returns `nil` from `hitTest` so clicks pass through to the PDFView.
+**HighlightablePDFView+Toolbar.swift**: `showSelectionToolbar(at:)` positions the `SelectionToolbar` near the selection endpoint with edge clamping, `hideSelectionToolbar()` hides it, and `copySelectionToPasteboard()` copies the current selection text.
+
+**HighlightablePDFView+HitTesting.swift**: `highlightGroupAtPoint(_:)` finds which highlight group was clicked. `switchToGroup(_:)` enters editing mode for a clicked group and shows the toolbar. `findConnectedGroup(containing:)` (private) uses groupID dictionary lookup when available, falling back to vertical adjacency proximity for legacy annotations without groupIDs. `areVerticallyAdjacent(_:_:)` (private) checks whether two annotation rects are close enough to belong to the same highlight.
+
+### HandleDotView.swift
+
+Custom `NSView` that draws a blue teardrop-style drag handle (circle + vertical stick). Has its own `Layout` constants for circle size, stick width, and overlap. Returns `nil` from `hitTest` so clicks pass through to the underlying PDFView. Previously embedded inside `HighlightablePDFView.swift`, now in its own file.
+
+### String+Helpers.swift
+
+Extends `Optional<String>` with `isNilOrEmpty`, which returns `true` for `nil`, empty strings, and whitespace-only strings. Used by `showSelectionToolbar(at:)` to validate selection text. Previously a `private extension` at the bottom of `HighlightablePDFView.swift`, now `internal` in `Extensions/` so it's accessible from the `+Toolbar` extension file.
 
 ### SelectionToolbar.swift
 
@@ -185,7 +202,7 @@ Singleton managing the on-disk PDF library at `~/Library/Application Support/Not
 
 **@Observable over ObservableObject.** Provides granular property-level observation, reducing unnecessary view invalidations. Infrastructure references (`pdfView`, `modelContext`, `searchObserver`) use `@ObservationIgnored`.
 
-**AppState split across extensions.** Core state in `AppState.swift`, highlight CRUD in `AppState+Highlights.swift`, search logic in `AppState+Search.swift`. Keeps each file focused while maintaining a single shared object.
+**Large classes split across extensions.** Both `AppState` and `HighlightablePDFView` are split into a core file plus `+Topic.swift` extensions. `AppState` splits into core state, highlights, and search. `HighlightablePDFView` splits into core/setup, editing, mouse events, toolbar, and hit testing. This keeps each file focused and readable while maintaining a single class. The tradeoff: properties that would normally be `private` must be `internal` because Swift extensions in separate files cannot access `private`/`fileprivate` members.
 
 **Centralized color definitions.** `HighlightColor` is the single source of truth for annotation colors, toolbar display colors, SwiftUI colors, and the selectable color set. The `from(nsColor:)` classifier uses nearest-neighbor RGB distance with a 0.5 threshold.
 
