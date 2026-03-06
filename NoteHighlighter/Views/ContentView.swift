@@ -14,7 +14,6 @@ struct ContentView: View {
             if appState.pdfDocument != nil {
                 PDFKitView(document: appState.pdfDocument, pdfView: $pdfViewRef, appState: appState)
                     .padding(.leading, 4) // Prevent PDFView from capturing mouse events at the divider edge
-                    .background(Color(white: 0.95)) // Match PDFView background to hide the padding gap
                     .onChange(of: pdfViewRef) { _, newView in
                         appState.pdfView = newView
                     }
