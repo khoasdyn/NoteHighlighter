@@ -20,9 +20,7 @@ struct NoteHighlighterApp: App {
                 if appState.currentBook != nil {
                     ContentView()
                 } else {
-                    NavigationStack {
-                        GalleryView()
-                    }
+                    GalleryView()
                 }
             }
             .environment(appState)

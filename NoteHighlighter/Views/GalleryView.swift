@@ -2,10 +2,31 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - Sidebar tabs
+
+enum SidebarTab: String, CaseIterable, Identifiable {
+    case library = "Library"
+    case notes = "Notes"
+    case journal = "Journal"
+    case settings = "Settings"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .library: return "books.vertical"
+        case .notes: return "note.text"
+        case .journal: return "book.closed"
+        case .settings: return "gearshape"
+        }
+    }
+}
+
 struct GalleryView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \BookItem.dateAdded, order: .reverse) private var books: [BookItem]
+    @State private var selectedTab: SidebarTab = .library
 
     private let columns = [
         GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 20)
@@ -14,6 +35,44 @@ struct GalleryView: View {
     var body: some View {
         @Bindable var appState = appState
 
+        NavigationSplitView {
+            List(SidebarTab.allCases, selection: $selectedTab) { tab in
+                Label(tab.rawValue, systemImage: tab.icon)
+                    .tag(tab)
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+        } detail: {
+            switch selectedTab {
+            case .library:
+                libraryContent
+            default:
+                placeholderContent
+            }
+        }
+        .navigationTitle(selectedTab.rawValue)
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                if selectedTab == .library {
+                    Button {
+                        appState.showFileImporter = true
+                    } label: {
+                        Label("Import PDF", systemImage: "plus")
+                    }
+                }
+            }
+        }
+        .fileImporter(
+            isPresented: $appState.showFileImporter,
+            allowedContentTypes: [.pdf],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+    }
+
+    // MARK: - Library content
+
+    private var libraryContent: some View {
         Group {
             if books.isEmpty {
                 emptyState
@@ -38,23 +97,24 @@ struct GalleryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .navigationTitle("Library")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    appState.showFileImporter = true
-                } label: {
-                    Label("Import PDF", systemImage: "plus")
-                }
-            }
+    }
+
+    // MARK: - Placeholder for future tabs
+
+    private var placeholderContent: some View {
+        VStack(spacing: 12) {
+            Image(systemName: selectedTab.icon)
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text(selectedTab.rawValue)
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text("Coming soon")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
         }
-        .fileImporter(
-            isPresented: $appState.showFileImporter,
-            allowedContentTypes: [.pdf],
-            allowsMultipleSelection: false
-        ) { result in
-            handleImport(result)
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Empty state
