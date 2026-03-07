@@ -55,6 +55,10 @@ class HighlightablePDFView: PDFView {
     var wordSelectionDidDrag = false
     var wordSelectionStartPage: PDFPage?
     var wordSelectionStartPoint: CGPoint = .zero
+    /// View-coordinate origin of the click, used for minimum-drag-distance check
+    var wordSelectionStartViewPoint: CGPoint = .zero
+    /// Minimum drag distance (in view points) before treating movement as intentional drag
+    static let wordDragThreshold: CGFloat = 4.0
 
     // MARK: - Setup
 

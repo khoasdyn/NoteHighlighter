@@ -40,14 +40,17 @@ extension HighlightablePDFView {
             }
         }
 
-        // Word-mode: record start point but don't select yet (only drag triggers selection)
+        // Word-mode: only intercept single clicks for custom drag selection.
+        // Double-click and beyond fall through to PDFView's native word/line selection.
         if appState?.selectionMode == .word,
+           event.clickCount == 1,
            let clickPage = page(for: viewPoint, nearest: true) {
             let pagePoint = convert(viewPoint, to: clickPage)
             wordSelectionActive = true
             wordSelectionDidDrag = false
             wordSelectionStartPage = clickPage
             wordSelectionStartPoint = pagePoint
+            wordSelectionStartViewPoint = viewPoint
             currentSelection = nil
             return
         }
@@ -58,17 +61,32 @@ extension HighlightablePDFView {
     override func mouseDragged(with event: NSEvent) {
         // Word-mode drag: build selection from start word to current word
         if wordSelectionActive {
-            wordSelectionDidDrag = true
             let viewPoint = convert(event.locationInWindow, from: nil)
+
+            // Require both minimum distance AND landing on a different word
+            // to distinguish a click from an intentional drag.
+            guard distance(viewPoint, wordSelectionStartViewPoint) >= Self.wordDragThreshold else { return }
+
             guard let document,
                   let startPage = wordSelectionStartPage,
                   let dragPage = page(for: viewPoint, nearest: true) else { return }
 
             let dragPagePoint = convert(viewPoint, to: dragPage)
 
-            // Get word boundaries; fall back to raw points in whitespace
+            // If still on the same word, don't treat as a drag yet
             let startWord = startPage.selectionForWord(at: wordSelectionStartPoint)
             let endWord = dragPage.selectionForWord(at: dragPagePoint)
+            let sameWord: Bool
+            if startPage == dragPage,
+               let sw = startWord?.bounds(for: startPage),
+               let ew = endWord?.bounds(for: dragPage) {
+                sameWord = sw.intersects(ew)
+            } else {
+                sameWord = false
+            }
+            guard !sameWord else { return }
+
+            wordSelectionDidDrag = true
 
             let startIdx = document.index(for: startPage)
             let endIdx = document.index(for: dragPage)
@@ -178,6 +196,7 @@ extension HighlightablePDFView {
             wordSelectionActive = false
             wordSelectionDidDrag = false
             wordSelectionStartPage = nil
+            wordSelectionStartViewPoint = .zero
 
             if didDrag {
                 let viewPoint = convert(event.locationInWindow, from: nil)
