@@ -124,9 +124,49 @@ class HighlightablePDFView: PDFView {
         }
     }
 
+    // MARK: - Snap edge
+
+    enum SnapEdge {
+        case leading, trailing
+    }
+
     // MARK: - Utilities
 
     func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2))
+    }
+
+    /// Attempt word-level snap in Word Mode. If the cursor is near text, snaps to the
+    /// word boundary. If the cursor is outside text but on the same vertical band as a
+    /// text line, snaps to that line's edge. Returns nil if completely outside text.
+    func wordSnappedPoint(on page: PDFPage, at point: CGPoint, edge: SnapEdge) -> CGPoint? {
+        // 1. Try word snap — accept if the word is close to the cursor
+        if let wordSel = page.selectionForWord(at: point) {
+            let wb = wordSel.bounds(for: page)
+            let tolerance = max(wb.height, 20)
+            if wb.insetBy(dx: -tolerance, dy: -tolerance).contains(point) {
+                let x = edge == .leading ? wb.minX : wb.maxX
+                return CGPoint(x: x, y: wb.midY)
+            }
+        }
+
+        // 2. Word is too far — try snapping to the nearest line at the cursor's Y.
+        //    Use a probe point at the horizontal center of the page's bounds to
+        //    hit text content, then check the line's vertical overlap.
+        let pageBounds = page.bounds(for: .cropBox)
+        let probeX = pageBounds.midX
+        let probePoint = CGPoint(x: probeX, y: point.y)
+        if let lineSel = page.selectionForLine(at: probePoint) {
+            let lb = lineSel.bounds(for: page)
+            // Accept if the cursor's Y is within one line-height of the line
+            let yTolerance = max(lb.height, 20)
+            if point.y >= lb.minY - yTolerance && point.y <= lb.maxY + yTolerance {
+                let x = edge == .leading ? lb.minX : lb.maxX
+                return CGPoint(x: x, y: lb.midY)
+            }
+        }
+
+        // 3. Completely outside text content — return nil to freeze
+        return nil
     }
 }

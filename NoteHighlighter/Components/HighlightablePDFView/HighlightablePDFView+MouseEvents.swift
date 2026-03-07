@@ -162,16 +162,11 @@ extension HighlightablePDFView {
             if let page = page(for: viewPoint, nearest: true) {
                 let pagePoint = convert(viewPoint, to: page)
                 if appState?.selectionMode == .word {
-                    // Word mode: snap to word boundary. If the point is outside
-                    // text content, selectionForWord snaps to the nearest word
-                    // which can be far away. Only update if the snap target is
-                    // within a reasonable distance, otherwise freeze in place.
-                    guard let wordSel = page.selectionForWord(at: pagePoint) else { break }
-                    let wordBounds = wordSel.bounds(for: page)
-                    let tolerance = max(wordBounds.height, 20)
-                    guard wordBounds.insetBy(dx: -tolerance, dy: -tolerance).contains(pagePoint) else { break }
-                    startPagePoint = CGPoint(x: wordBounds.minX, y: wordBounds.midY)
-                    editingStartPage = page
+                    if let snapped = wordSnappedPoint(on: page, at: pagePoint, edge: .leading) {
+                        startPagePoint = snapped
+                        editingStartPage = page
+                    }
+                    // Outside text bounds → freeze in place
                 } else {
                     startPagePoint = pagePoint
                     editingStartPage = page
@@ -181,12 +176,10 @@ extension HighlightablePDFView {
             if let page = page(for: viewPoint, nearest: true) {
                 let pagePoint = convert(viewPoint, to: page)
                 if appState?.selectionMode == .word {
-                    guard let wordSel = page.selectionForWord(at: pagePoint) else { break }
-                    let wordBounds = wordSel.bounds(for: page)
-                    let tolerance = max(wordBounds.height, 20)
-                    guard wordBounds.insetBy(dx: -tolerance, dy: -tolerance).contains(pagePoint) else { break }
-                    endPagePoint = CGPoint(x: wordBounds.maxX, y: wordBounds.midY)
-                    editingEndPage = page
+                    if let snapped = wordSnappedPoint(on: page, at: pagePoint, edge: .trailing) {
+                        endPagePoint = snapped
+                        editingEndPage = page
+                    }
                 } else {
                     endPagePoint = pagePoint
                     editingEndPage = page
