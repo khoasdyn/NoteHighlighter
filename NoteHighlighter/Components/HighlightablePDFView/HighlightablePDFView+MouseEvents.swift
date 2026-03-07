@@ -160,27 +160,37 @@ extension HighlightablePDFView {
         switch dragging {
         case .start:
             if let page = page(for: viewPoint, nearest: true) {
-                var pagePoint = convert(viewPoint, to: page)
-                // In Word mode, snap to word boundary when possible
-                if appState?.selectionMode == .word,
-                   let wordSel = page.selectionForWord(at: pagePoint) {
+                let pagePoint = convert(viewPoint, to: page)
+                if appState?.selectionMode == .word {
+                    // Word mode: snap to word boundary. If the point is outside
+                    // text content, selectionForWord snaps to the nearest word
+                    // which can be far away. Only update if the snap target is
+                    // within a reasonable distance, otherwise freeze in place.
+                    guard let wordSel = page.selectionForWord(at: pagePoint) else { break }
                     let wordBounds = wordSel.bounds(for: page)
-                    pagePoint = CGPoint(x: wordBounds.minX, y: wordBounds.midY)
+                    let tolerance = max(wordBounds.height, 20)
+                    guard wordBounds.insetBy(dx: -tolerance, dy: -tolerance).contains(pagePoint) else { break }
+                    startPagePoint = CGPoint(x: wordBounds.minX, y: wordBounds.midY)
+                    editingStartPage = page
+                } else {
+                    startPagePoint = pagePoint
+                    editingStartPage = page
                 }
-                startPagePoint = pagePoint
-                editingStartPage = page
             }
         case .end:
             if let page = page(for: viewPoint, nearest: true) {
-                var pagePoint = convert(viewPoint, to: page)
-                // In Word mode, snap to word boundary when possible
-                if appState?.selectionMode == .word,
-                   let wordSel = page.selectionForWord(at: pagePoint) {
+                let pagePoint = convert(viewPoint, to: page)
+                if appState?.selectionMode == .word {
+                    guard let wordSel = page.selectionForWord(at: pagePoint) else { break }
                     let wordBounds = wordSel.bounds(for: page)
-                    pagePoint = CGPoint(x: wordBounds.maxX, y: wordBounds.midY)
+                    let tolerance = max(wordBounds.height, 20)
+                    guard wordBounds.insetBy(dx: -tolerance, dy: -tolerance).contains(pagePoint) else { break }
+                    endPagePoint = CGPoint(x: wordBounds.maxX, y: wordBounds.midY)
+                    editingEndPage = page
+                } else {
+                    endPagePoint = pagePoint
+                    editingEndPage = page
                 }
-                endPagePoint = pagePoint
-                editingEndPage = page
             }
         case .none: break
         }
