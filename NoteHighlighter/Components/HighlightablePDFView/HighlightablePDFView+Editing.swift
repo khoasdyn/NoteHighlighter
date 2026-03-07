@@ -149,12 +149,9 @@ extension HighlightablePDFView {
             return
         }
 
-        // Only remove old annotations after confirming we have a valid new selection
-        for annotation in editingAnnotations {
-            annotation.page?.removeAnnotation(annotation)
-        }
-
-        var newAnnotations: [PDFAnnotation] = []
+        // Build new annotations into a temporary list before touching the page tree.
+        // This lets us verify page coverage and reject partial results.
+        var pendingAnnotations: [(PDFAnnotation, PDFPage)] = []
         for lineSelection in selection.selectionsByLine() {
             for page in lineSelection.pages {
                 let bounds = lineSelection.bounds(for: page)
@@ -163,9 +160,33 @@ extension HighlightablePDFView {
                 let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
                 annotation.color = color
                 annotation.userName = groupID
-                page.addAnnotation(annotation)
-                newAnnotations.append(annotation)
+                pendingAnnotations.append((annotation, page))
             }
+        }
+
+        // Reject if any page within the current editing range would have zero annotations.
+        // This prevents cross-page highlights from partially vanishing when a handle
+        // is dragged outside text content bounds on one page, while still allowing
+        // legitimate shrinking of highlights (e.g. dragging end handle back to start page).
+        let startIdx = document.index(for: startPage)
+        let endIdx = document.index(for: endPage)
+        let newPages = Set(pendingAnnotations.map { $0.1 })
+        for pageIdx in min(startIdx, endIdx)...max(startIdx, endIdx) {
+            guard let pg = document.page(at: pageIdx) else { continue }
+            if !newPages.contains(pg) {
+                return
+            }
+        }
+
+        // Safe to apply — remove old annotations and add new ones
+        for annotation in editingAnnotations {
+            annotation.page?.removeAnnotation(annotation)
+        }
+
+        var newAnnotations: [PDFAnnotation] = []
+        for (annotation, page) in pendingAnnotations {
+            page.addAnnotation(annotation)
+            newAnnotations.append(annotation)
         }
 
         editingAnnotations = newAnnotations
