@@ -118,7 +118,7 @@ extension HighlightablePDFView {
         }
 
         stopEditing()
-        appState?.refreshHighlights()
+        appState?.highlightManager.refreshHighlights()
     }
 
     func deleteHighlightUnderSelection() {
@@ -128,7 +128,7 @@ extension HighlightablePDFView {
         }
         clearSelection()
         stopEditing()
-        appState?.refreshHighlights()
+        appState?.highlightManager.refreshHighlights()
     }
 
     // MARK: - Annotation rebuilding

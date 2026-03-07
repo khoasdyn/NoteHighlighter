@@ -3,14 +3,16 @@ import SwiftUI
 struct SearchResultBar: View {
     @Environment(AppState.self) private var appState
 
+    private var search: SearchService { appState.searchService }
+
     var body: some View {
         HStack(spacing: 6) {
-            Text("Found on \(appState.searchResultPageCount) page\(appState.searchResultPageCount == 1 ? "" : "s")")
+            Text("Found on \(search.searchResultPageCount) page\(search.searchResultPageCount == 1 ? "" : "s")")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 
             Button {
-                appState.previousSearchResult()
+                search.previousResult()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 12, weight: .semibold))
@@ -21,7 +23,7 @@ struct SearchResultBar: View {
             .controlSize(.small)
 
             Button {
-                appState.nextSearchResult()
+                search.nextResult()
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))

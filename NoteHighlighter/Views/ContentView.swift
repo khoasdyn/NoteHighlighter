@@ -7,6 +7,7 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var appState = appState
+        @Bindable var search = appState.searchService
 
         NavigationSplitView {
             HighlightSidebar()
@@ -15,10 +16,12 @@ struct ContentView: View {
                 PDFKitView(document: appState.pdfDocument, pdfView: $pdfViewRef, appState: appState)
                     .padding(.leading, 4) // Prevent PDFView from capturing mouse events at the divider edge
                     .onChange(of: pdfViewRef) { _, newView in
-                        appState.pdfView = newView
+                        appState.navigator = newView
+                        appState.searchService.navigator = newView
+                        appState.highlightManager.navigator = newView
                     }
                     .overlay(alignment: .top) {
-                        if appState.isSearchActive && !appState.searchResults.isEmpty {
+                        if search.isSearchActive && !search.searchResults.isEmpty {
                             SearchResultBar()
                                 .environment(appState)
                         }
@@ -28,13 +31,13 @@ struct ContentView: View {
         .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 400)
         .navigationTitle(appState.fileName)
         .navigationSubtitle(appState.pageCount > 0 ? appState.currentPageLabel : "")
-        .searchable(text: $appState.searchQuery, placement: .toolbar, prompt: "Search")
+        .searchable(text: $search.searchQuery, placement: .toolbar, prompt: "Search")
         .onSubmit(of: .search) {
-            appState.performSearch()
+            appState.searchService.performSearch()
         }
-        .onChange(of: appState.searchQuery) { _, newValue in
-            if newValue.isEmpty && appState.isSearchActive {
-                appState.clearSearch()
+        .onChange(of: search.searchQuery) { _, newValue in
+            if newValue.isEmpty && search.isSearchActive {
+                appState.searchService.clearSearch()
             }
         }
         .toolbar {

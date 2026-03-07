@@ -6,8 +6,11 @@ struct HighlightSidebar: View {
     @State private var filterColor: HighlightColor?
     @State private var searchText: String = ""
 
+    private var search: SearchService { appState.searchService }
+    private var hlm: HighlightManager { appState.highlightManager }
+
     private var filteredHighlights: [Highlight] {
-        var results = appState.highlights
+        var results = hlm.highlights
 
         if let filterColor {
             results = results.filter { $0.color == filterColor }
@@ -24,7 +27,7 @@ struct HighlightSidebar: View {
     }
 
     private var availableColors: [HighlightColor] {
-        let colors = Set(appState.highlights.map(\.color))
+        let colors = Set(hlm.highlights.map(\.color))
         return HighlightColor.allCases.filter { colors.contains($0) }
     }
 
@@ -32,7 +35,7 @@ struct HighlightSidebar: View {
         @Bindable var appState = appState
 
         VStack(spacing: 0) {
-            if appState.isSearchActive {
+            if search.isSearchActive {
                 searchResultsView
             } else {
                 switch appState.sidebarMode {
@@ -99,9 +102,9 @@ struct HighlightSidebar: View {
 
             Divider()
 
-            if appState.isSearching && appState.searchResults.isEmpty {
+            if search.isSearching && search.searchResults.isEmpty {
                 searchingState
-            } else if appState.searchResults.isEmpty {
+            } else if search.searchResults.isEmpty {
                 searchEmptyState
             } else {
                 searchResultsList
@@ -116,9 +119,9 @@ struct HighlightSidebar: View {
                     .font(.headline)
                     .lineLimit(1)
 
-                if !appState.searchResults.isEmpty {
-                    let pageCount = appState.searchResultPageCount
-                    let totalCount = appState.searchResults.count
+                if !search.searchResults.isEmpty {
+                    let pageCount = search.searchResultPageCount
+                    let totalCount = search.searchResults.count
                     Text("\(totalCount) match\(totalCount == 1 ? "" : "es") on \(pageCount) page\(pageCount == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -151,7 +154,7 @@ struct HighlightSidebar: View {
                 .font(.system(size: 32))
                 .foregroundStyle(.secondary)
 
-            Text("No results for \"\(appState.searchQuery)\"")
+            Text("No results for \"\(search.searchQuery)\"")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -163,11 +166,11 @@ struct HighlightSidebar: View {
 
     private var searchResultsList: some View {
         List {
-            ForEach(appState.searchResultsByPage) { group in
+            ForEach(search.searchResultsByPage) { group in
                 Section {
                     ForEach(Array(group.snippets.enumerated()), id: \.offset) { _, snippet in
                         let globalIndex = globalSearchIndex(group: group, selectionIndex: snippet.selectionIndex)
-                        let isActive = globalIndex == appState.currentSearchResultIndex
+                        let isActive = globalIndex == search.currentSearchResultIndex
 
                         SearchResultRow(
                             snippet: snippet.text,
@@ -176,7 +179,7 @@ struct HighlightSidebar: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            appState.navigateToSearchResult(at: globalIndex)
+                            search.navigateToResult(at: globalIndex)
                         }
                     }
                 } header: {
@@ -201,7 +204,7 @@ struct HighlightSidebar: View {
 
     private func globalSearchIndex(group: SearchResultGroup, selectionIndex: Int) -> Int {
         var index = 0
-        for pageGroup in appState.searchResultsByPage {
+        for pageGroup in search.searchResultsByPage {
             if pageGroup.pageIndex == group.pageIndex {
                 return index + selectionIndex
             }
@@ -219,8 +222,8 @@ struct HighlightSidebar: View {
                     .font(.headline)
                     .lineLimit(1)
 
-                if !appState.highlights.isEmpty {
-                    Text("\(appState.highlights.count) highlight\(appState.highlights.count == 1 ? "" : "s")")
+                if !hlm.highlights.isEmpty {
+                    Text("\(hlm.highlights.count) highlight\(hlm.highlights.count == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -304,7 +307,7 @@ struct HighlightSidebar: View {
                     }
                     .contextMenu {
                         Button("Delete Highlight", role: .destructive) {
-                            appState.removeHighlight(highlight)
+                            hlm.removeHighlight(highlight)
                         }
                     }
             }

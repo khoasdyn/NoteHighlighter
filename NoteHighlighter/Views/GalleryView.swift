@@ -151,10 +151,10 @@ struct GalleryView: View {
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
 
         do {
-            let fileName = try BookStorage.shared.copyPDF(from: url)
+            let fileName = try appState.bookStorage.copyPDF(from: url)
             let title = url.deletingPathExtension().lastPathComponent
-            let storedURL = BookStorage.shared.pdfURL(for: fileName)
-            let thumbnail = BookStorage.shared.generateThumbnail(for: storedURL)
+            let storedURL = appState.bookStorage.pdfURL(for: fileName)
+            let thumbnail = appState.bookStorage.generateThumbnail(for: storedURL, size: CGSize(width: 200, height: 280))
 
             let book = BookItem(title: title, fileName: fileName, thumbnailData: thumbnail)
             modelContext.insert(book)
@@ -169,7 +169,7 @@ struct GalleryView: View {
     }
 
     private func deleteBook(_ book: BookItem) {
-        BookStorage.shared.deletePDF(fileName: book.fileName)
+        appState.bookStorage.deletePDF(fileName: book.fileName)
         modelContext.delete(book)
         try? modelContext.save()
     }

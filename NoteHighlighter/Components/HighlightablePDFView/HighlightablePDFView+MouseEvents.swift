@@ -31,7 +31,7 @@ extension HighlightablePDFView {
                     return
                 }
                 stopEditing()
-                appState?.refreshHighlights()
+                appState?.highlightManager.refreshHighlights()
             }
         } else {
             if let group = highlightGroupAtPoint(viewPoint) {
@@ -206,7 +206,7 @@ extension HighlightablePDFView {
                 endPagePoint = CGPoint(x: last.bounds.maxX, y: last.bounds.midY)
             }
             repositionHandles()
-            appState?.refreshHighlights()
+            appState?.highlightManager.refreshHighlights()
             return
         }
 

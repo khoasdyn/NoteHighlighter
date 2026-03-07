@@ -2,6 +2,9 @@ import SwiftUI
 import PDFKit
 import SwiftData
 
+// MARK: - Re-export protocol
+// PDFNavigating is defined in Protocols/PDFNavigating.swift
+
 enum SelectionMode: String, CaseIterable {
     case character
     case word
@@ -54,7 +57,6 @@ final class AppState {
 
     // MARK: - Highlight state
 
-    var highlights: [Highlight] = []
     var selectedHighlight: Highlight?
     var currentHighlightColor: HighlightColor = .yellow
 
@@ -68,14 +70,6 @@ final class AppState {
         didSet { UserDefaults.standard.set(selectionMode.rawValue, forKey: "selectionMode") }
     }
 
-    // MARK: - Search state
-
-    var searchQuery: String = ""
-    var searchResults: [PDFSelection] = []
-    var currentSearchResultIndex: Int = 0
-    var isSearchActive: Bool = false
-    var isSearching: Bool = false
-
     // MARK: - Init
 
     init() {
@@ -85,11 +79,17 @@ final class AppState {
 
     // MARK: - Dependencies
 
-    /// Reference to the PDFView so we can navigate to highlights
-    @ObservationIgnored weak var pdfView: PDFView?
+    /// Abstracted navigation interface (concrete type is PDFView)
+    @ObservationIgnored weak var navigator: PDFNavigating?
 
-    /// Handles async search notifications from PDFDocument
-    @ObservationIgnored lazy var searchObserver = SearchObserver(appState: self)
+    /// Search subsystem (owns all search state and logic)
+    let searchService = SearchService()
+
+    /// Highlight subsystem (owns highlight CRUD and persistence)
+    let highlightManager = HighlightManager()
+
+    /// File storage for PDF books
+    @ObservationIgnored var bookStorage: BookStoring = BookStorage.shared
 
     /// SwiftData model context for persistence
     @ObservationIgnored var modelContext: ModelContext?
@@ -105,30 +105,10 @@ final class AppState {
         return "Page \(label) of \(pageCount)"
     }
 
-    var searchResultPageCount: Int {
-        Set(searchResults.compactMap { $0.pages.first }).count
-    }
-
-    var searchResultsByPage: [SearchResultGroup] {
-        guard let document = pdfDocument else { return [] }
-        var groups: [Int: [PDFSelection]] = [:]
-        for selection in searchResults {
-            guard let page = selection.pages.first else { continue }
-            let index = document.index(for: page)
-            groups[index, default: []].append(selection)
-        }
-        return groups.keys.sorted().compactMap { pageIndex in
-            guard let selections = groups[pageIndex] else { return nil }
-            let page = document.page(at: pageIndex)
-            let label = page?.label ?? "\(pageIndex + 1)"
-            return SearchResultGroup(pageIndex: pageIndex, pageLabel: label, selections: selections, query: searchQuery)
-        }
-    }
-
     // MARK: - Book lifecycle
 
     func openBook(_ book: BookItem) {
-        let url = BookStorage.shared.pdfURL(for: book.fileName)
+        let url = bookStorage.pdfURL(for: book.fileName)
         guard let document = PDFDocument(url: url) else {
             print("Failed to load PDF for book: \(book.title)")
             return
@@ -141,21 +121,30 @@ final class AppState {
         pageCount = document.pageCount
         currentPageIndex = 0
         selectedHighlight = nil
-        loadHighlights()
+
+        searchService.document = document
+
+        highlightManager.document = document
+        highlightManager.currentBook = book
+        highlightManager.modelContext = modelContext
+        highlightManager.navigator = navigator
+        highlightManager.loadHighlights()
     }
 
     func closeBook() {
-        saveHighlights()
-        clearSearch()
+        highlightManager.saveHighlights()
+        searchService.clearSearch()
+        searchService.document = nil
+        highlightManager.document = nil
+        highlightManager.currentBook = nil
         currentBook = nil
         pdfDocument = nil
         pdfFileURL = nil
-        highlights = []
         selectedHighlight = nil
         fileName = ""
         currentPageIndex = 0
         pageCount = 0
-        pdfView = nil
+        navigator = nil
         sidebarMode = .highlights
     }
 
@@ -169,16 +158,16 @@ final class AppState {
     func navigateToOutline(_ outline: PDFOutline) {
         selectedOutline = outline
 
-        guard let pdfView,
+        guard let navigator,
               let destination = outline.destination,
               let page = destination.page else { return }
 
         let pointY = destination.point.y
-        let visibleHeight = pdfView.visibleRect.height / pdfView.scaleFactor
+        let visibleHeight = navigator.visibleRect.height / navigator.scaleFactor
         let targetY = pointY + visibleHeight / 2
 
         let centeredDestination = PDFDestination(page: page, at: CGPoint(x: 0, y: targetY))
-        pdfView.go(to: centeredDestination)
+        navigator.go(to: centeredDestination)
 
         if let document = pdfDocument {
             currentPageIndex = document.index(for: page)

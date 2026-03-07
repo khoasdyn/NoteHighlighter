@@ -164,7 +164,7 @@ class SelectionToolbar: NSView {
         if pdfView?.isEditing == true {
             pdfView?.changeEditingHighlightColor(selectedColor)
         } else {
-            pdfView?.appState?.addHighlightFromSelection()
+            pdfView?.appState?.highlightManager.addHighlightFromSelection(color: selectedColor)
         }
         pdfView?.hideSelectionToolbar()
     }

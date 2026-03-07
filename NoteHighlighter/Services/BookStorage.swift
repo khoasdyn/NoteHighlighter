@@ -2,7 +2,7 @@ import Foundation
 import PDFKit
 import AppKit
 
-final class BookStorage {
+final class BookStorage: BookStoring {
     static let shared = BookStorage()
 
     private init() {}
