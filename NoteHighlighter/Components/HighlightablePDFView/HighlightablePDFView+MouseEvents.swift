@@ -121,7 +121,12 @@ extension HighlightablePDFView {
                 toPoint = startPt
             }
 
-            if let selection = document.selection(from: fromPage, at: fromPoint, to: toPage, at: toPoint) {
+            // Only update selection if the result contains actual text — prevents
+            // empty/degenerate selections from wiping the highlight when the cursor
+            // moves outside text character bounds.
+            if let selection = document.selection(from: fromPage, at: fromPoint, to: toPage, at: toPoint),
+               let text = selection.string,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 currentSelection = selection
             }
             return
