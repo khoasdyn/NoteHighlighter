@@ -141,14 +141,17 @@ extension HighlightablePDFView {
         let color = editingColor ?? editingAnnotations.first?.color ?? HighlightColor.yellow.nsColor
         let groupID = editingGroupID ?? editingAnnotations.first?.userName
 
-        for annotation in editingAnnotations {
-            annotation.page?.removeAnnotation(annotation)
+        // Build the new selection first — if it's nil or empty, keep existing annotations
+        guard let selection = document.selection(from: startPage, at: startPagePoint,
+                                                  to: endPage, at: endPagePoint),
+              let text = selection.string,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
         }
 
-        guard let selection = document.selection(from: startPage, at: startPagePoint,
-                                                  to: endPage, at: endPagePoint) else {
-            editingAnnotations = []
-            return
+        // Only remove old annotations after confirming we have a valid new selection
+        for annotation in editingAnnotations {
+            annotation.page?.removeAnnotation(annotation)
         }
 
         var newAnnotations: [PDFAnnotation] = []
