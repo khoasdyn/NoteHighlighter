@@ -8,10 +8,9 @@ final class BookStorage: BookStoring {
     private init() {}
 
     private var booksDirectory: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport
-            .appendingPathComponent("NoteHighlighter", isDirectory: true)
-            .appendingPathComponent("Books", isDirectory: true)
+        let dir = URL.applicationSupportDirectory
+            .appending(path: "NoteHighlighter", directoryHint: .isDirectory)
+            .appending(path: "Books", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

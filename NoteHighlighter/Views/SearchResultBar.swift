@@ -8,28 +8,20 @@ struct SearchResultBar: View {
     var body: some View {
         HStack(spacing: 6) {
             Text("Found on \(search.searchResultPageCount) page\(search.searchResultPageCount == 1 ? "" : "s")")
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
 
-            Button {
+            Button("Previous Result", systemImage: "chevron.left") {
                 search.previousResult()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 16, height: 16)
-                    .contentShape(Rectangle())
             }
+            .labelStyle(.iconOnly)
             .buttonStyle(.bordered)
             .controlSize(.small)
 
-            Button {
+            Button("Next Result", systemImage: "chevron.right") {
                 search.nextResult()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 16, height: 16)
-                    .contentShape(Rectangle())
             }
+            .labelStyle(.iconOnly)
             .buttonStyle(.bordered)
             .controlSize(.small)
         }

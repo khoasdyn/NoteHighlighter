@@ -28,6 +28,12 @@ struct NoteHighlighterApp: App {
                 appState.modelContext = modelContainer.mainContext
             }
             .frame(minWidth: 900, minHeight: 600)
+            .alert("Error", isPresented: Binding(
+                get: { appState.errorMessage != nil },
+                set: { if !$0 { appState.errorMessage = nil } }
+            )) { } message: {
+                Text(appState.errorMessage ?? "")
+            }
         }
         .modelContainer(modelContainer)
         .commands {

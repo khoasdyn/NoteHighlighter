@@ -2,48 +2,7 @@ import SwiftUI
 import PDFKit
 import SwiftData
 
-// MARK: - Re-export protocol
-// PDFNavigating is defined in Protocols/PDFNavigating.swift
-
-enum SelectionMode: String, CaseIterable {
-    case character
-    case word
-
-    var label: String {
-        switch self {
-        case .character: return "Character"
-        case .word: return "Word"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .character: return "character.cursor.ibeam"
-        case .word: return "text.word.spacing"
-        }
-    }
-}
-
-enum SidebarMode: String, CaseIterable {
-    case highlights
-    case tableOfContents
-
-    var label: String {
-        switch self {
-        case .highlights: return "Highlights and Notes"
-        case .tableOfContents: return "Table of Contents"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .highlights: return "highlighter"
-        case .tableOfContents: return "list.bullet.indent"
-        }
-    }
-}
-
-@Observable
+@MainActor @Observable
 final class AppState {
 
     // MARK: - Book state
@@ -63,6 +22,7 @@ final class AppState {
     // MARK: - UI state
 
     var showFileImporter = false
+    var errorMessage: String?
     var sidebarMode: SidebarMode = .highlights
     var selectedOutline: PDFOutline?
 
@@ -110,7 +70,7 @@ final class AppState {
     func openBook(_ book: BookItem) {
         let url = bookStorage.pdfURL(for: book.fileName)
         guard let document = PDFDocument(url: url) else {
-            print("Failed to load PDF for book: \(book.title)")
+            errorMessage = "Could not open \"\(book.title)\". The file may be corrupted."
             return
         }
 

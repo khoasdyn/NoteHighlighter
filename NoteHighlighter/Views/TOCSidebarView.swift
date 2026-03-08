@@ -13,7 +13,11 @@ struct TOCSidebarView: View {
             if let root = appState.pdfDocument?.outlineRoot, root.numberOfChildren > 0 {
                 outlineList(root: root)
             } else {
-                emptyState
+                ContentUnavailableView {
+                    Label("No table of contents", systemImage: "list.bullet.indent")
+                } description: {
+                    Text("This PDF doesn't have a table of contents")
+                }
             }
         }
     }
@@ -51,29 +55,6 @@ struct TOCSidebarView: View {
             }
         }
         .listStyle(.sidebar)
-    }
-
-    // MARK: - Empty state
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "list.bullet.indent")
-                .font(.system(size: 32))
-                .foregroundStyle(.secondary)
-
-            Text("No table of contents")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            Text("This PDF doesn't have a table of contents")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Helpers
@@ -117,48 +98,52 @@ private struct OutlineItemView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                appState.navigateToOutline(outline)
-            } label: {
-                HStack(spacing: 6) {
-                    if hasChildren {
+            HStack(spacing: 6) {
+                if hasChildren {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(isSelected ? Color.white.opacity(0.7) : Color.secondary.opacity(0.5))
-                            .frame(width: 12)
-                            .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    isExpanded.toggle()
-                                }
-                            }
-                    } else {
-                        Spacer()
                             .frame(width: 12)
                     }
-
-                    Text(outline.label ?? "Untitled")
-                        .font(depth == 0 ? .callout.weight(.medium) : .callout)
-                        .foregroundStyle(isSelected ? .white : .primary)
-                        .lineLimit(2)
-
+                    .buttonStyle(.plain)
+                } else {
                     Spacer()
+                        .frame(width: 12)
+                }
 
-                    if let pageLabel {
-                        Text(pageLabel)
-                            .font(.caption)
-                            .foregroundStyle(isSelected ? Color.white.opacity(0.7) : Color.secondary.opacity(0.5))
+                Button {
+                    appState.navigateToOutline(outline)
+                } label: {
+                    HStack {
+                        Text(outline.label ?? "Untitled")
+                            .font(depth == 0 ? .callout.weight(.medium) : .callout)
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .lineLimit(2)
+
+                        Spacer()
+
+                        if let pageLabel {
+                            Text(pageLabel)
+                                .font(.caption)
+                                .foregroundStyle(isSelected ? Color.white.opacity(0.7) : Color.secondary.opacity(0.5))
+                        }
                     }
                 }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
-                .padding(.leading, CGFloat(depth) * 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isSelected ? Color.accentColor : Color.clear)
-                )
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .padding(.leading, CGFloat(depth) * 14)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.accentColor : Color.clear)
+            )
+            .contentShape(Rectangle())
 
             if hasChildren && isExpanded {
                 ForEach(0..<outline.numberOfChildren, id: \.self) { index in

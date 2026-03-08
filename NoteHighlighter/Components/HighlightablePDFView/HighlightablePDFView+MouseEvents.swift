@@ -203,7 +203,8 @@ extension HighlightablePDFView {
 
             if didDrag {
                 let viewPoint = convert(event.locationInWindow, from: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(50))
                     guard let self,
                           let selection = self.currentSelection,
                           let text = selection.string,
@@ -241,7 +242,8 @@ extension HighlightablePDFView {
 
         let viewPoint = convert(event.locationInWindow, from: nil)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
             guard let self,
                   let selection = self.currentSelection,
                   let text = selection.string,

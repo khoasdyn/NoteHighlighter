@@ -2,7 +2,7 @@ import PDFKit
 import SwiftData
 
 /// Encapsulates all highlight CRUD operations, extracted from AppState.
-@Observable
+@MainActor @Observable
 final class HighlightManager: HighlightManaging {
 
     // MARK: - State
@@ -74,7 +74,11 @@ final class HighlightManager: HighlightManaging {
             }
         }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            print("⚠️ Failed to save highlights: \(error)")
+        }
     }
 
     // MARK: - Refresh (re-extract + save)

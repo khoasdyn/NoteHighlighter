@@ -18,8 +18,8 @@ struct HighlightSidebar: View {
 
         if !searchText.isEmpty {
             results = results.filter {
-                $0.text.localizedCaseInsensitiveContains(searchText) ||
-                ($0.note?.localizedCaseInsensitiveContains(searchText) ?? false)
+                $0.text.localizedStandardContains(searchText) ||
+                ($0.note?.localizedStandardContains(searchText) ?? false)
             }
         }
 
@@ -87,7 +87,7 @@ struct HighlightSidebar: View {
             Divider()
 
             if filteredHighlights.isEmpty {
-                emptyState
+                highlightsEmptyState
             } else {
                 highlightsList(selection: selectedHighlight)
             }
@@ -105,7 +105,11 @@ struct HighlightSidebar: View {
             if search.isSearching && search.searchResults.isEmpty {
                 searchingState
             } else if search.searchResults.isEmpty {
-                searchEmptyState
+                ContentUnavailableView {
+                    Label("No results", systemImage: "magnifyingglass")
+                } description: {
+                    Text("No results for \"\(search.searchQuery)\"")
+                }
             } else {
                 searchResultsList
             }
@@ -147,23 +151,6 @@ struct HighlightSidebar: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var searchEmptyState: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 32))
-                .foregroundStyle(.secondary)
-
-            Text("No results for \"\(search.searchQuery)\"")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     private var searchResultsList: some View {
         List {
             ForEach(search.searchResultsByPage) { group in
@@ -172,27 +159,28 @@ struct HighlightSidebar: View {
                         let globalIndex = globalSearchIndex(group: group, selectionIndex: snippet.selectionIndex)
                         let isActive = globalIndex == search.currentSearchResultIndex
 
-                        SearchResultRow(
-                            snippet: snippet.text,
-                            matchRange: snippet.range,
-                            isActive: isActive
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
+                        Button {
                             search.navigateToResult(at: globalIndex)
+                        } label: {
+                            SearchResultRow(
+                                snippet: snippet.text,
+                                matchRange: snippet.range,
+                                isActive: isActive
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                 } header: {
                     HStack {
                         Text("Page \(group.pageLabel)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .fontWeight(.medium)
+                            .bold()
 
                         Spacer()
 
                         Text("\(group.matchCount) match\(group.matchCount == 1 ? "" : "es")")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 4)
@@ -247,11 +235,11 @@ struct HighlightSidebar: View {
         }
         .padding(6)
         .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(6)
+        .clipShape(.rect(cornerRadius: 6))
     }
 
     private var colorFilterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 6) {
                 FilterChip(
                     label: "All",
@@ -272,161 +260,42 @@ struct HighlightSidebar: View {
                 }
             }
         }
+        .scrollIndicators(.hidden)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: appState.pdfDocument == nil ? "doc.text" : "highlighter")
-                .font(.system(size: 32))
-                .foregroundStyle(.secondary)
-
-            Text(appState.pdfDocument == nil
-                 ? "Open a PDF to see highlights"
-                 : "No highlights found")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
+    private var highlightsEmptyState: some View {
+        Group {
             if appState.pdfDocument == nil {
-                Text("⌘O to open a file")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                ContentUnavailableView {
+                    Label("Open a PDF to see highlights", systemImage: "doc.text")
+                } description: {
+                    Text("⌘O to open a file")
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("No highlights found", systemImage: "highlighter")
+                }
             }
-            Spacer()
         }
-        .frame(maxWidth: .infinity)
     }
 
     private func highlightsList(selection: Binding<Highlight?>) -> some View {
         List(selection: selection) {
             ForEach(filteredHighlights) { highlight in
-                HighlightRow(highlight: highlight)
-                    .tag(highlight)
-                    .onTapGesture {
-                        appState.navigateToHighlight(highlight)
+                Button {
+                    appState.navigateToHighlight(highlight)
+                } label: {
+                    HighlightRow(highlight: highlight)
+                }
+                .buttonStyle(.plain)
+                .tag(highlight)
+                .contextMenu {
+                    Button("Delete Highlight", systemImage: "trash", role: .destructive) {
+                        hlm.removeHighlight(highlight)
                     }
-                    .contextMenu {
-                        Button("Delete Highlight", role: .destructive) {
-                            hlm.removeHighlight(highlight)
-                        }
-                    }
+                }
             }
         }
         .listStyle(.sidebar)
-    }
-}
-
-// MARK: - Search result row
-
-private struct SearchResultRow: View {
-    let snippet: String
-    let matchRange: Range<String.Index>
-    let isActive: Bool
-
-    var body: some View {
-        Text(attributedSnippet)
-            .lineLimit(2)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isActive ? Color.accentColor : Color.clear)
-            )
-            .foregroundStyle(isActive ? .white : .primary)
-    }
-
-    private var attributedSnippet: AttributedString {
-        var result = AttributedString(snippet)
-        result.font = .system(size: 13)
-        result.foregroundColor = isActive ? .white : .secondary
-
-        let nsRange = NSRange(matchRange, in: snippet)
-        if let attrRange = Range(nsRange, in: result) {
-            result[attrRange].font = .system(size: 13, weight: .semibold)
-            result[attrRange].foregroundColor = isActive ? .white : .primary
-        }
-
-        return result
-    }
-}
-
-// MARK: - Highlight row
-
-private struct HighlightRow: View {
-    let highlight: Highlight
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(highlight.color.swiftUIColor)
-                    .frame(width: 8, height: 8)
-
-                Text(highlight.spansMultiplePages
-                     ? "Pages \(highlight.pageNumber)-\(highlight.endPageIndex + 1)"
-                     : "Page \(highlight.pageNumber)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fontWeight(.medium)
-
-                Spacer()
-
-                if highlight.note != nil {
-                    Image(systemName: "note.text")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(highlight.text)
-                .font(.callout)
-                .lineLimit(4)
-                .foregroundStyle(.primary)
-
-            if let note = highlight.note {
-                Text(note)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(2)
-                    .padding(.top, 2)
-            }
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Filter chip
-
-private struct FilterChip: View {
-    let label: String
-    let color: HighlightColor?
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                if let color {
-                    Circle()
-                        .fill(color.swiftUIColor)
-                        .frame(width: 6, height: 6)
-                }
-
-                Text(label)
-                    .font(.caption)
-                    .fontWeight(isSelected ? .semibold : .regular)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(isSelected ? Color.accentColor.opacity(0.15) : Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
     }
 }

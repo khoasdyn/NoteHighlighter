@@ -63,7 +63,7 @@ enum HighlightExtractor {
             }
 
             let fullText = mergedTexts.joined(separator: " ")
-                .replacingOccurrences(of: "  ", with: " ")
+                .replacing("  ", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             guard !fullText.isEmpty else { continue }

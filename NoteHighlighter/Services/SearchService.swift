@@ -1,7 +1,7 @@
 import PDFKit
 
 /// Encapsulates all PDF search state and logic, extracted from AppState.
-@Observable
+@MainActor @Observable
 final class SearchService: PDFSearching {
 
     // MARK: - State

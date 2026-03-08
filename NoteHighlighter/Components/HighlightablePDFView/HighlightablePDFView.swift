@@ -88,7 +88,7 @@ class HighlightablePDFView: PDFView {
             name: .PDFViewSelectionChanged, object: self
         )
 
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             self?.setupScrollObserver()
         }
     }
