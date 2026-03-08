@@ -239,7 +239,7 @@ struct HighlightSidebar: View {
     }
 
     private var colorFilterBar: some View {
-        ScrollView(.horizontal) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 FilterChip(
                     label: "All",
@@ -260,7 +260,7 @@ struct HighlightSidebar: View {
                 }
             }
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
     }
 
     private var highlightsEmptyState: some View {
