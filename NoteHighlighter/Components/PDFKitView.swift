@@ -56,7 +56,10 @@ struct PDFKitView: NSViewRepresentable {
                 guard let self, let pdfView,
                       let currentPage = pdfView.currentPage,
                       let document = pdfView.document else { return }
-                self.appState?.currentPageIndex = document.index(for: currentPage)
+                let newIndex = document.index(for: currentPage)
+                Task { @MainActor in
+                    self.appState?.currentPageIndex = newIndex
+                }
             }
         }
 
